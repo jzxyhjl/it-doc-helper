@@ -1,0 +1,354 @@
+# 一键部署指南
+
+## ✅ 系统已完全容器化，支持一键部署
+
+本系统使用 Docker 和 Docker Compose 进行容器化部署，所有服务（数据库、缓存、后端、前端）都已封装在 Docker 容器中，**无需在目标环境安装任何额外软件**（除了 Docker 本身）。
+
+## 📋 目标环境基础设施要求
+
+### 必需的基础设施
+
+1. **Docker** (版本 20.10+)
+   - 用于运行容器
+   - 下载地址：https://www.docker.com/get-started
+
+2. **Docker Compose** (版本 2.0+)
+   - 用于编排多容器应用
+   - 通常随 Docker Desktop 一起安装
+   - 或单独安装：https://docs.docker.com/compose/install/
+
+3. **网络连接**
+   - 用于下载 Docker 镜像
+   - 用于访问 DeepSeek API（AI功能）
+
+4. **系统资源要求**
+   - **CPU**: 2核心以上（推荐4核心+）
+   - **内存**: 4GB以上（推荐8GB+）
+     - PostgreSQL: ~512MB
+     - Redis: ~128MB
+     - 后端服务: ~1GB
+     - Celery Worker: ~1GB
+     - 前端服务: ~128MB
+     - 系统预留: ~1GB
+   - **磁盘空间**: 10GB以上（用于镜像、数据、上传文件）
+   - **操作系统**: 
+     - Linux (Ubuntu 20.04+, CentOS 7+, Debian 10+)
+     - macOS 10.15+
+     - Windows 10/11 (使用 Docker Desktop)
+
+### 可选的基础设施
+
+- **域名和SSL证书**（生产环境推荐）
+- **反向代理**（如 Nginx，用于生产环境）
+- **监控工具**（如 Prometheus, Grafana）
+
+## 🚀 一键部署步骤
+
+### 1. 克隆项目
+
+```bash
+git clone <repository-url>
+cd it-helper
+```
+
+### 2. 配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑 .env 文件，至少配置以下必需项：
+#   - POSTGRES_PASSWORD: 数据库密码（必填）
+#   - DEEPSEEK_API_KEY: DeepSeek API密钥（必填，用于AI功能）
+```
+
+**`.env` 文件示例：**
+```env
+# 数据库配置
+POSTGRES_DB=it_helper
+POSTGRES_USER=it_helper
+POSTGRES_PASSWORD=your_secure_password_here
+
+# DeepSeek API配置（必填）
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
+DEEPSEEK_API_BASE=https://api.deepseek.com
+
+# 可选配置
+USE_LOCAL_EMBEDDING=true
+EMBEDDING_MODEL_NAME=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+UPLOAD_MAX_SIZE=31457280
+LOG_LEVEL=INFO
+```
+
+### 3. 一键启动所有服务
+
+```bash
+# 构建并启动所有服务（后台运行）
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看启动日志
+docker-compose logs -f
+```
+
+### 4. 等待服务就绪
+
+首次启动需要：
+- 下载 Docker 镜像（约 2-5 分钟，取决于网络速度）
+- 构建应用镜像（约 3-5 分钟）
+- 初始化数据库（自动执行，约 10-30 秒）
+
+**检查服务状态：**
+```bash
+# 查看所有服务状态
+docker-compose ps
+
+# 应该看到所有服务都是 "Up" 状态：
+# - it-helper-postgres (healthy)
+# - it-helper-redis (healthy)
+# - it-helper-backend (running)
+# - it-helper-worker (running)
+# - it-helper-frontend (running)
+```
+
+### 5. 访问应用
+
+- **前端界面**: http://localhost
+- **API文档**: http://localhost:8000/docs
+- **健康检查**: http://localhost:8000/health
+
+## 📦 系统架构
+
+系统包含以下 Docker 容器：
+
+1. **PostgreSQL数据库** (`it-helper-postgres`)
+   - 镜像: `pgvector/pgvector:pg15`
+   - 端口: 5432
+   - 数据持久化: Docker Volume `postgres_data`
+   - 功能: 存储文档、处理结果、向量数据
+
+2. **Redis缓存** (`it-helper-redis`)
+   - 镜像: `redis:7-alpine`
+   - 端口: 6379
+   - 数据持久化: Docker Volume `redis_data`
+   - 功能: 任务队列、缓存
+
+3. **后端API服务** (`it-helper-backend`)
+   - 镜像: 自构建（基于 `python:3.11-slim`）
+   - 端口: 8000
+   - 功能: RESTful API、文档处理、AI集成
+
+4. **Celery Worker** (`it-helper-worker`)
+   - 镜像: 自构建（与后端相同）
+   - 功能: 异步文档处理任务
+
+5. **前端服务** (`it-helper-frontend`)
+   - 镜像: 自构建（基于 `nginx:alpine`）
+   - 端口: 80
+   - 功能: Web界面
+
+## 🔧 常用命令
+
+### 查看服务状态
+```bash
+docker-compose ps
+```
+
+### 查看日志
+```bash
+# 所有服务日志
+docker-compose logs -f
+
+# 特定服务日志
+docker-compose logs -f backend
+docker-compose logs -f worker
+docker-compose logs -f postgres
+```
+
+### 重启服务
+```bash
+# 重启所有服务
+docker-compose restart
+
+# 重启特定服务
+docker-compose restart backend
+```
+
+### 停止服务
+```bash
+# 停止所有服务（保留数据）
+docker-compose stop
+
+# 停止并删除容器（保留数据卷）
+docker-compose down
+
+# 停止并删除所有（包括数据卷，谨慎使用！）
+docker-compose down -v
+```
+
+### 更新系统
+```bash
+# 拉取最新代码
+git pull
+
+# 重新构建并启动
+docker-compose build
+docker-compose up -d
+```
+
+### 查看资源使用
+```bash
+docker stats
+```
+
+## 🔒 安全建议
+
+### 生产环境部署
+
+1. **修改默认密码**
+   - 确保 `.env` 文件中的 `POSTGRES_PASSWORD` 是强密码
+   - 不要将 `.env` 文件提交到版本控制
+
+2. **配置防火墙**
+   - 只开放必要的端口（80, 8000）
+   - 限制数据库和Redis的访问（仅容器内访问）
+
+3. **使用HTTPS**
+   - 配置反向代理（Nginx）
+   - 使用SSL证书
+
+4. **定期备份**
+   - 备份 PostgreSQL 数据卷
+   - 备份上传的文件（`./uploads` 目录）
+
+## 📊 数据持久化
+
+### ✅ Docker Volume 已自动配置
+
+系统使用 Docker Volume 持久化数据，**一键部署时自动创建和使用**：
+
+1. **PostgreSQL数据**: `postgres_data` (Docker Volume)
+   - 自动创建，无需手动操作
+   - 数据位置: Docker 管理的 Volume
+   - 查看命令: `docker volume inspect it-helper_postgres_data`
+
+2. **Redis数据**: `redis_data` (Docker Volume)
+   - 自动创建，无需手动操作
+   - 数据位置: Docker 管理的 Volume
+   - 查看命令: `docker volume inspect it-helper_redis_data`
+
+3. **上传文件**: `./uploads` (绑定挂载)
+   - 挂载到项目目录下的 `uploads` 文件夹
+   - 如果目录不存在，Docker 会自动创建
+
+### 🔍 查看 Volume 信息
+
+```bash
+# 查看所有 Volume
+docker volume ls | grep it-helper
+
+# 查看 Volume 详细信息
+docker volume inspect it-helper_postgres_data
+docker volume inspect it-helper_redis_data
+
+# 查看 Volume 使用情况
+docker system df -v
+```
+
+### 💾 备份数据
+
+```bash
+# 备份PostgreSQL
+docker-compose exec postgres pg_dump -U it_helper it_helper > backup.sql
+
+# 备份上传文件
+tar -czf uploads_backup.tar.gz ./uploads
+
+# 备份整个 Volume（可选）
+docker run --rm -v it-helper_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz /data
+```
+
+### 🗑️ 删除 Volume（谨慎操作）
+
+```bash
+# 停止并删除容器和数据卷（数据会丢失！）
+docker-compose down -v
+
+# 只删除 Volume（保留容器配置）
+docker volume rm it-helper_postgres_data it-helper_redis_data
+```
+
+## 🐛 故障排查
+
+### 服务无法启动
+
+1. **检查端口占用**
+```bash
+# 检查端口是否被占用
+netstat -tuln | grep -E ':(80|8000|5432|6379)'
+```
+
+2. **查看详细日志**
+```bash
+docker-compose logs backend
+docker-compose logs worker
+```
+
+3. **检查环境变量**
+```bash
+# 确保 .env 文件存在且配置正确
+cat .env
+```
+
+### 数据库连接失败
+
+1. **检查数据库容器状态**
+```bash
+docker-compose ps postgres
+```
+
+2. **检查数据库日志**
+```bash
+docker-compose logs postgres
+```
+
+3. **手动连接测试**
+```bash
+docker-compose exec postgres psql -U it_helper -d it_helper
+```
+
+### AI功能不工作
+
+1. **检查API密钥**
+```bash
+# 确保 DEEPSEEK_API_KEY 已配置
+grep DEEPSEEK_API_KEY .env
+```
+
+2. **检查网络连接**
+```bash
+# 测试API连接
+curl https://api.deepseek.com
+```
+
+## 📝 总结
+
+✅ **系统已完全容器化**，所有依赖都封装在 Docker 容器中
+
+✅ **一键部署**：只需 `docker-compose up -d` 即可启动所有服务
+
+✅ **目标环境要求极低**：
+   - 只需安装 Docker 和 Docker Compose
+   - 无需安装 PostgreSQL、Redis、Python、Node.js 等
+   - 所有服务自动配置和初始化
+
+✅ **数据持久化**：使用 Docker Volume，数据不会丢失
+
+✅ **易于迁移**：整个系统可以轻松迁移到任何支持 Docker 的环境
+
+---
+
+**最后更新**: 2024-12-12
+

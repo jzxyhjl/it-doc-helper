@@ -53,7 +53,6 @@ cp .env.example .env
 # 编辑 .env 文件，填入你的配置：
 #   - POSTGRES_PASSWORD: 数据库密码
 #   - DEEPSEEK_API_KEY: DeepSeek API密钥（必填，用于AI功能）
-#   详细配置说明请查看 docs/DEEPSEEK_CONFIG.md
 ```
 
 3. 启动服务（使用Docker，推荐）
@@ -66,8 +65,6 @@ docker-compose up -d
 5. 访问应用
 - 前端：http://localhost
 - API文档：http://localhost:8000/docs
-
-**注意：** 数据库使用Docker容器化部署，无需本地安装PostgreSQL。详细说明请查看 [数据库设置文档](docs/DATABASE_SETUP.md)
 
 ## 项目结构
 
@@ -114,19 +111,12 @@ npm run dev
 
 按阅读顺序：
 
-1. **[项目介绍](docs/1_README.md)** - 项目介绍和快速开始
-2. **[一键部署指南](docs/2_一键部署指南.md)** - 详细的Docker部署说明
-3. **[DeepSeek配置](docs/3_DeepSeek配置.md)** - AI服务配置说明
-4. **[数据库设置](docs/4_数据库设置.md)** - 数据库配置和初始化（可选）
-5. **[系统测试](docs/5_系统测试.md)** - 测试指南和测试结果
-6. **[问题排查](docs/6_问题排查.md)** - 常见问题和解决方案
-
-### 需求文档（历史）
-详细需求文档请查看 `.trae/documents/` 目录：
-- `需求分析_IT学习辅助系统.md` - 需求分析
-- `it_helper_requirements.md` - 需求文档（EARS语法）
-- `it_helper_design.md` - 技术方案设计
-- `it_helper_tasks.md` - 实施计划
+1. **README** - 项目介绍和快速开始（本文档）
+2. **一键部署指南** - 详细的Docker部署说明
+3. **DeepSeek配置** - AI服务配置说明
+4. **数据库设置** - 数据库配置和初始化（可选）
+5. **系统测试** - 测试指南和测试结果
+6. **问题排查** - 常见问题和解决方案
 
 ## 许可证
 
