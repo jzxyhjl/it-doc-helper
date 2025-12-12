@@ -32,11 +32,47 @@ export DEEPSEEK_API_BASE=https://api.deepseek.com
 
 ## 获取 DeepSeek API Key
 
-1. 访问 [DeepSeek 官网](https://www.deepseek.com/)
-2. 注册/登录账号
-3. 进入 API 管理页面
-4. 创建新的 API Key
-5. 复制 API Key（格式通常为 `sk-xxxxx`）
+DeepSeek API Key 是系统运行**必需**的配置，用于AI文档处理功能（文档类型识别、内容分析、学习路径生成等）。
+
+### 详细获取步骤
+
+1. **访问 DeepSeek 官网**
+   - 打开浏览器访问：https://www.deepseek.com/
+   - 点击右上角 **登录/注册**
+
+2. **注册/登录账号**
+   - 如果已有账号，直接登录
+   - 如果没有账号，点击注册并完成账号创建
+
+3. **进入 API 管理页面**
+   - 登录后，在用户中心或控制台找到 **API 管理** 或 **API Keys** 入口
+   - 点击进入 API 管理页面
+
+4. **创建新的 API Key**
+   - 点击 **创建新的 API Key** 或 **Generate API Key** 按钮
+   - 输入 API Key 名称（可选，用于标识用途，如"IT学习辅助系统"）
+   - 确认创建
+
+5. **复制 API Key**
+   - 创建成功后，系统会显示 API Key（格式通常为 `sk-xxxxx`）
+   - **重要**：API Key 只显示一次，请立即复制保存
+   - 如果忘记保存，需要删除后重新创建
+
+6. **配置到系统**
+   - 将复制的 API Key 填入 `.env` 文件的 `DEEPSEEK_API_KEY` 字段
+   - 保存文件后重启服务
+
+### API Key 格式
+
+- 格式：`sk-` 开头，后跟一串字符
+- 示例：`sk-1234567890abcdefghijklmnopqrstuvwxyz`
+- 长度：通常 40-50 个字符
+
+### 费用说明
+
+- DeepSeek 提供免费额度，适合个人和小规模使用
+- 超出免费额度后按使用量计费
+- 建议在 DeepSeek 官网查看最新的价格信息
 
 ---
 

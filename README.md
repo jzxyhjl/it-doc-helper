@@ -36,38 +36,69 @@
 
 ### 前置要求
 
-- Docker & Docker Compose
-- DeepSeek API Key
+- **Docker & Docker Compose** (版本 20.10+)
+- **DeepSeek API Key**（用于AI功能，[获取方式](#获取-deepseek-api-key)）
 
 ### 安装步骤
 
-1. 克隆项目
+1. **克隆项目**
 ```bash
 git clone <repository-url>
 cd it-doc-helper
 ```
 
-2. 配置环境变量
+2. **配置环境变量**
 ```bash
+# 复制环境变量模板
 cp .env.example .env
-# 编辑 .env 文件，填入你的配置：
-#   - POSTGRES_PASSWORD: 数据库密码
+
+# 编辑 .env 文件，至少配置以下必需项：
+#   - POSTGRES_PASSWORD: 数据库密码（必填，请使用强密码）
 #   - DEEPSEEK_API_KEY: DeepSeek API密钥（必填，用于AI功能）
-#   详细配置说明请查看 docs/DEEPSEEK_CONFIG.md
 ```
 
-3. 启动服务（使用Docker，推荐）
+**`.env` 文件配置示例：**
+```env
+# 必需配置
+POSTGRES_PASSWORD=your_secure_password_here
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
+
+# 其他配置有默认值，可根据需要修改
+```
+
+3. **启动服务（使用Docker，推荐）**
 ```bash
 docker-compose up -d
 ```
 
-4. 等待服务启动（数据库会自动初始化）
+4. **等待服务启动**（首次启动需要 5-10 分钟）
+   - 下载 Docker 镜像
+   - 构建应用镜像
+   - 初始化数据库（自动执行）
 
-5. 访问应用
-- 前端：http://localhost/it-doc-helper
-- API文档：http://localhost:8000/docs
+5. **访问应用**
+   - **前端界面**: http://localhost/it-doc-helper
+   - **API文档**: http://localhost:8000/docs
+   - **健康检查**: http://localhost:8000/health
 
-**注意：** 数据库使用Docker容器化部署，无需本地安装PostgreSQL。详细说明请查看 [数据库设置文档](docs/DATABASE_SETUP.md)
+### 获取 DeepSeek API Key
+
+DeepSeek API Key 是系统运行**必需**的配置，用于AI文档处理功能。
+
+**获取步骤：**
+1. 访问 [DeepSeek 官网](https://www.deepseek.com/)
+2. 注册/登录账号
+3. 进入 **API 管理**页面
+4. 点击 **创建新的 API Key**
+5. 复制 API Key（格式通常为 `sk-xxxxx`）
+6. 将 API Key 填入 `.env` 文件的 `DEEPSEEK_API_KEY` 字段
+
+**详细配置说明：** 请查看 [DeepSeek配置文档](docs/3_DeepSeek配置.md)
+
+**注意：** 
+- 数据库使用Docker容器化部署，无需本地安装PostgreSQL
+- 所有服务都已容器化，一键启动即可使用
+- 详细部署说明请查看 [一键部署指南](docs/2_一键部署指南.md)
 
 ## 项目结构
 
@@ -114,12 +145,13 @@ npm run dev
 
 按阅读顺序：
 
-1. **[项目介绍](docs/1_README.md)** - 项目介绍和快速开始
-2. **[一键部署指南](docs/2_一键部署指南.md)** - 详细的Docker部署说明
-3. **[DeepSeek配置](docs/3_DeepSeek配置.md)** - AI服务配置说明
-4. **[数据库设置](docs/4_数据库设置.md)** - 数据库配置和初始化（可选）
-5. **[系统测试](docs/5_系统测试.md)** - 测试指南和测试结果
-6. **[问题排查](docs/6_问题排查.md)** - 常见问题和解决方案
+1. **[快速开始检查清单](docs/0_快速开始检查清单.md)** - 部署前检查清单（推荐先看）
+2. **[项目介绍](docs/1_README.md)** - 项目介绍和快速开始
+3. **[一键部署指南](docs/2_一键部署指南.md)** - 详细的Docker部署说明
+4. **[DeepSeek配置](docs/3_DeepSeek配置.md)** - AI服务配置说明（**必读**）
+5. **[数据库设置](docs/4_数据库设置.md)** - 数据库配置和初始化（可选）
+6. **[系统测试](docs/5_系统测试.md)** - 测试指南和测试结果
+7. **[问题排查](docs/6_问题排查.md)** - 常见问题和解决方案
 
 ### 需求文档（历史）
 详细需求文档请查看 `.trae/documents/` 目录：

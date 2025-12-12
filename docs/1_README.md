@@ -49,22 +49,36 @@ cd it-doc-helper
 
 2. 配置环境变量
 ```bash
+# 复制环境变量模板
 cp .env.example .env
-# 编辑 .env 文件，填入你的配置：
-#   - POSTGRES_PASSWORD: 数据库密码
+
+# 编辑 .env 文件，至少配置以下必需项：
+#   - POSTGRES_PASSWORD: 数据库密码（必填，请使用强密码）
 #   - DEEPSEEK_API_KEY: DeepSeek API密钥（必填，用于AI功能）
 ```
+
+**DeepSeek API Key 获取方式：**
+1. 访问 [DeepSeek 官网](https://www.deepseek.com/)
+2. 注册/登录账号
+3. 进入 API 管理页面创建 API Key
+4. 将 API Key 填入 `.env` 文件
+
+详细说明请查看 [DeepSeek配置文档](docs/3_DeepSeek配置.md)
 
 3. 启动服务（使用Docker，推荐）
 ```bash
 docker-compose up -d
 ```
 
-4. 等待服务启动（数据库会自动初始化）
+4. 等待服务启动（首次启动需要 5-10 分钟）
+   - 下载 Docker 镜像
+   - 构建应用镜像
+   - 初始化数据库（自动执行）
 
 5. 访问应用
-- 前端：http://localhost/it-doc-helper
-- API文档：http://localhost:8000/docs
+- **前端界面**: http://localhost/it-doc-helper
+- **API文档**: http://localhost:8000/docs
+- **健康检查**: http://localhost:8000/health
 
 ## 项目结构
 
