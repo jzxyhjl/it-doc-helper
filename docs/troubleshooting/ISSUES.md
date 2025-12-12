@@ -1,0 +1,202 @@
+# 问题排查指南
+
+## 已修复的问题
+
+### 1. 进度条不动问题 ✅
+
+**问题描述**: 上传文档后，进度条一直处于等待处理状态（pending），不更新。
+
+**问题原因**: 数据库会话并发冲突
+```
+cannot perform operation: another operation is in progress
+```
+
+**修复方案**: 
+- 修改`update_progress`函数，使用独立的数据库会话
+- 每个`update_progress`调用使用独立的数据库会话
+- 添加了错误处理和回滚机制
+- 确保会话在使用后正确关闭
+
+**相关文件**: 
+- `backend/app/tasks/document_processing.py`
+- `backend/app/core/database.py`
+
+### 2. CORS配置问题 ✅
+
+**问题**: CORS只允许了 `localhost:3000`，但前端可能运行在其他端口
+
+**修复**: 添加了常用端口 `5173-5176` 到CORS允许列表
+
+**文件**: `backend/app/core/config.py`
+
+### 3. Content-Type处理问题 ✅
+
+**问题**: API客户端默认设置了 `Content-Type: application/json`，会干扰文件上传
+
+**修复**: 移除了默认Content-Type，让axios根据数据类型自动设置
+
+**文件**: `frontend/src/api/client.ts`, `frontend/src/api/documents.ts`
+
+### 4. 文档上传问题 ✅
+
+**排查步骤**:
+
+1. **检查浏览器控制台**
+   - 打开浏览器开发者工具 (F12)
+   - 查看 Console 标签页的错误信息
+
+2. **检查网络请求**
+   - 在 Network 标签页中找到上传请求
+   - 检查请求头 `Content-Type` 应该是 `multipart/form-data`
+   - 检查响应状态码和响应体
+
+3. **检查后端服务**
+   ```bash
+   docker-compose ps
+   docker-compose logs backend --tail=50
+   ```
+
+4. **测试API**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/documents/upload \
+     -F "file=@test_document.md"
+   ```
+
+### 5. 智能推荐超时问题 ✅
+
+**问题**: 推荐请求超时（60秒）
+
+**修复**: 
+- 使用并行执行：本地推荐和书籍推荐同时执行
+- 总耗时 = max(本地推荐时间, 书籍推荐时间)
+- 理论上可以减少50%的等待时间
+
+**文件**: `backend/app/services/recommendation_service.py`
+
+### 6. JSON解析问题 ✅
+
+**问题**: AI返回的JSON被markdown代码块包裹，导致解析失败
+
+**修复**: 
+- 自动移除markdown代码块标记（```json ... ```）
+- 改进JSON提取逻辑
+- 更好的错误处理
+
+**文件**: `backend/app/services/ai_service.py`
+
+### 7. SQL参数类型问题 ✅
+
+**问题**: PostgreSQL无法确定None参数的类型
+
+**修复**: 
+- 改为动态构建WHERE条件
+- 只在参数不为None时添加条件
+- 避免传递None值给SQL参数
+
+**文件**: `backend/app/services/recommendation_service.py`
+
+## 常见问题
+
+### 问题1: CORS错误
+
+**错误信息**: `Access to XMLHttpRequest at '...' from origin '...' has been blocked by CORS policy`
+
+**解决方案**:
+1. 检查后端CORS配置是否包含前端地址
+2. 确认前端运行端口在CORS允许列表中
+3. 重启后端服务
+
+### 问题2: 文件上传失败但没有错误提示
+
+**可能原因**:
+1. 文件类型不在允许列表中
+2. 文件大小超过30MB限制
+3. 网络请求被拦截
+
+**解决方案**:
+1. 检查文件类型和大小
+2. 查看浏览器控制台的错误信息
+3. 检查网络请求的响应
+
+### 问题3: 上传成功但页面没有跳转
+
+**可能原因**:
+1. 路由配置问题
+2. 响应数据格式问题
+3. 状态管理问题
+
+**解决方案**:
+1. 检查浏览器控制台是否有JavaScript错误
+2. 确认响应包含 `document_id` 和 `task_id`
+3. 检查路由配置是否正确
+
+### 问题4: 推荐功能超时
+
+**可能原因**:
+1. AI调用耗时过长
+2. 网络连接问题
+3. 超时时间设置过短
+
+**解决方案**:
+1. 检查后端日志，查看具体耗时
+2. 已优化为并行执行，减少等待时间
+3. 前端超时时间已增加到60秒
+
+## 调试技巧
+
+### 1. 查看日志
+
+```bash
+# 后端日志
+docker-compose logs -f backend
+
+# Worker日志
+docker-compose logs -f worker
+
+# 所有服务日志
+docker-compose logs -f
+```
+
+### 2. 检查服务状态
+
+```bash
+# 检查所有容器状态
+docker-compose ps
+
+# 检查特定服务
+docker-compose ps backend
+docker-compose ps worker
+```
+
+### 3. 测试API
+
+```bash
+# 健康检查
+curl http://localhost:8000/health
+
+# 测试上传
+curl -X POST http://localhost:8000/api/v1/documents/upload \
+  -F "file=@test_document.md"
+```
+
+## 如果问题仍然存在
+
+1. **收集信息**:
+   - 浏览器控制台的完整错误信息
+   - 网络请求的详细信息（请求头、响应头、响应体）
+   - 后端日志的相关部分
+
+2. **检查环境**:
+   - 前端服务是否正常运行
+   - 后端服务是否正常运行
+   - 端口是否被占用
+
+3. **重新启动服务**:
+   ```bash
+   docker-compose restart
+   ```
+
+---
+
+**最后更新**: 2024-12-11
+

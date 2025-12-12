@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义表格样式 */
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.prose table th,
+.prose table td {
+  border: 1px solid #9ca3af;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.prose table th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+  border-color: #6b7280;
+}
+
+.prose table tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+/* 优化有序列表样式 */
+.prose ol {
+  counter-reset: list-counter;
+  padding-left: 1.5rem;
+}
+
+.prose ol > li {
+  counter-increment: list-counter;
+  margin: 0.75rem 0;
+  padding-left: 0.5rem;
+  position: relative;
+}
+
+.prose ol > li::marker {
+  font-weight: 600;
+  color: #0ea5e9;
+}
+
+/* 优化无序列表样式 */
+.prose ul {
+  padding-left: 1.5rem;
+}
+
+.prose ul > li {
+  margin: 0.5rem 0;
+  padding-left: 0.5rem;
+}
+
+.prose ul > li::marker {
+  color: #0ea5e9;
+}
+
+/* 优化段落间距 */
+.prose p {
+  margin: 1rem 0;
+  line-height: 1.75;
+}
+
+/* 优化标题样式 */
+.prose h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.prose h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.prose h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: #374151;
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  margin: 0 auto;
+  text-align: left;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+}
+

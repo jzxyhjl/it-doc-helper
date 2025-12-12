@@ -1,0 +1,131 @@
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: it-helper-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-it_helper}
+      POSTGRES_USER: ${POSTGRES_USER:-it_helper}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - it-helper-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-it_helper}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: it-helper-redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - it-helper-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端API服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: it-helper-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-it_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_helper}
+      REDIS_URL: redis://redis:6379/0
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
+      USE_LOCAL_EMBEDDING: ${USE_LOCAL_EMBEDDING:-true}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      UPLOAD_DIR: /app/uploads
+      UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-31457280}
+      ALLOWED_EXTENSIONS: ${ALLOWED_EXTENSIONS:-pdf,docx,pptx,md,txt}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: http://localhost,http://localhost:80,http://localhost:3000
+    volumes:
+      - ./uploads:/app/uploads
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - it-helper-network
+    command: >
+      sh -c "
+        echo '等待数据库就绪...' &&
+        sleep 5 &&
+        echo '运行数据库迁移...' &&
+        alembic upgrade head || python scripts/init_db.py &&
+        echo '启动API服务...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # Celery Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: it-helper-worker
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-it_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_helper}
+      REDIS_URL: redis://redis:6379/0
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
+      USE_LOCAL_EMBEDDING: ${USE_LOCAL_EMBEDDING:-true}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      UPLOAD_DIR: /app/uploads
+      UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-31457280}
+      ALLOWED_EXTENSIONS: ${ALLOWED_EXTENSIONS:-pdf,docx,pptx,md,txt}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - it-helper-network
+    command: celery -A app.core.celery_app worker --loglevel=info
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: it-helper-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - it-helper-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  it-helper-network:
+    driver: bridge
+
