@@ -8,7 +8,7 @@ DeepSeek API Key 通过环境变量配置，支持两种方式：
 
 1. **创建 .env 文件**
 ```bash
-cd /Users/ggsk/Cursor/it-helper
+cd /Users/ggsk/Cursor/it-doc-helper
 cp .env.example .env
 ```
 
@@ -53,7 +53,7 @@ docker-compose up -d
 检查配置是否生效：
 ```bash
 # 查看后端容器环境变量
-docker exec it-helper-backend env | grep DEEPSEEK
+docker exec it-doc-helper-backend env | grep DEEPSEEK
 ```
 
 ### 本地开发环境
@@ -149,7 +149,7 @@ A: 同样在项目根目录创建 `.env` 文件，应用会自动读取。
 1. **查看日志**
 ```bash
 # Docker 环境
-docker logs it-helper-backend | grep -i deepseek
+docker logs it-doc-helper-backend | grep -i deepseek
 
 # 本地环境
 # 启动应用后查看控制台输出

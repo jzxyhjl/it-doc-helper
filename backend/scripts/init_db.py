@@ -21,12 +21,6 @@ async def init_db():
     try:
         logger.info("开始初始化数据库...")
         
-        # 创建所有表
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        
-        logger.info("数据库表创建成功")
-        
         # 启用pgvector扩展（必须在创建表之前）
         try:
             async with engine.begin() as conn:
@@ -38,6 +32,12 @@ async def init_db():
             logger.warning("pgvector扩展启用失败（可能未安装）", error=str(e))
             logger.warning("如果使用标准PostgreSQL镜像，需要安装pgvector扩展")
             logger.warning("建议使用pgvector/pgvector:pg15镜像（已在docker-compose.yml中配置）")
+        
+        # 创建所有表
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        
+        logger.info("数据库表创建成功")
         
     except Exception as e:
         logger.error("数据库初始化失败", error=str(e))
