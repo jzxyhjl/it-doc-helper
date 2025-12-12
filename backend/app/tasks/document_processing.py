@@ -219,18 +219,29 @@ def process_document_task(self, document_id: str, task_id: str):
                     
                     # 保存系统学习数据（基础版）
                     try:
-                        # 生成文档向量（异步，不阻塞主流程）
+                        # 生成文档向量（异步，不阻塞主流程，设置超时避免卡死）
                         embedding = None
                         try:
+                            import asyncio
                             from app.services.embedding_service import get_embedding_service
                             embedding_service = get_embedding_service()
-                            embedding = await embedding_service.generate_embedding(content)
-                            if embedding:
-                                logger.info("文档向量生成成功", document_id=document_id)
-                            else:
-                                logger.warning("文档向量生成失败，但继续处理", document_id=document_id)
+                            
+                            # 设置向量生成超时（60秒），避免卡死整个任务
+                            try:
+                                embedding = await asyncio.wait_for(
+                                    embedding_service.generate_embedding(content),
+                                    timeout=60.0  # 60秒超时
+                                )
+                                if embedding:
+                                    logger.info("文档向量生成成功", document_id=document_id)
+                                else:
+                                    logger.warning("文档向量生成失败，但继续处理", document_id=document_id)
+                            except asyncio.TimeoutError:
+                                logger.warning("向量生成超时（60秒），跳过向量生成，继续处理", document_id=document_id)
+                            except Exception as e:
+                                logger.warning("向量生成异常，但继续处理", error=str(e), document_id=document_id)
                         except Exception as e:
-                            logger.warning("向量生成异常，但继续处理", error=str(e), document_id=document_id)
+                            logger.warning("向量生成服务初始化失败，但继续处理", error=str(e), document_id=document_id)
                         
                         # 评估处理结果质量
                         quality_score = None

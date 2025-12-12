@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     
     # 数据库配置
     # 注意：Docker环境下使用 postgres:5432，本地开发使用 localhost:5432
-    DATABASE_URL: str = "postgresql://it_helper:password@localhost:5432/it_helper"
+    DATABASE_URL: str = "postgresql://it_doc_helper:password@localhost:5432/it_doc_helper"
     
     # Redis配置
     # 注意：Docker环境下使用 redis:6379，本地开发使用 localhost:6379

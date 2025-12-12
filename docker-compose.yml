@@ -2,19 +2,19 @@ services:
   # PostgreSQL数据库
   postgres:
     image: pgvector/pgvector:pg15
-    container_name: it-helper-postgres
+    container_name: it-doc-helper-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-it_helper}
-      POSTGRES_USER: ${POSTGRES_USER:-it_helper}
+      POSTGRES_DB: ${POSTGRES_DB:-it_doc_helper}
+      POSTGRES_USER: ${POSTGRES_USER:-it_doc_helper}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
-      - it-helper-network
+      - it-doc-helper-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-it_helper}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-it_doc_helper}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,13 +22,13 @@ services:
   # Redis缓存
   redis:
     image: redis:7-alpine
-    container_name: it-helper-redis
+    container_name: it-doc-helper-redis
     volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
     networks:
-      - it-helper-network
+      - it-doc-helper-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -40,9 +40,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: it-helper-backend
+    container_name: it-doc-helper-backend
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-it_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_helper}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-it_doc_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_doc_helper}
       REDIS_URL: redis://redis:6379/0
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
@@ -65,7 +65,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - it-helper-network
+      - it-doc-helper-network
     command: >
       sh -c "
         echo '等待数据库就绪...' &&
@@ -81,9 +81,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: it-helper-worker
+    container_name: it-doc-helper-worker
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-it_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_helper}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-it_doc_helper}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-it_doc_helper}
       REDIS_URL: redis://redis:6379/0
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
@@ -103,7 +103,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - it-helper-network
+      - it-doc-helper-network
     command: celery -A app.core.celery_app worker --loglevel=info
 
   # 前端服务
@@ -111,13 +111,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: it-helper-frontend
+    container_name: it-doc-helper-frontend
     ports:
       - "80:80"
     depends_on:
       - backend
     networks:
-      - it-helper-network
+      - it-doc-helper-network
 
 volumes:
   postgres_data:
@@ -126,6 +126,6 @@ volumes:
     driver: local
 
 networks:
-  it-helper-network:
+  it-doc-helper-network:
     driver: bridge
 

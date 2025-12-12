@@ -44,7 +44,7 @@
 1. 克隆项目
 ```bash
 git clone <repository-url>
-cd it-helper
+cd it-doc-helper
 ```
 
 2. 配置环境变量
@@ -64,7 +64,7 @@ docker-compose up -d
 4. 等待服务启动（数据库会自动初始化）
 
 5. 访问应用
-- 前端：http://localhost
+- 前端：http://localhost/it-doc-helper
 - API文档：http://localhost:8000/docs
 
 **注意：** 数据库使用Docker容器化部署，无需本地安装PostgreSQL。详细说明请查看 [数据库设置文档](docs/DATABASE_SETUP.md)
@@ -72,7 +72,7 @@ docker-compose up -d
 ## 项目结构
 
 ```
-it-helper/
+it-doc-helper/
 ├── backend/              # 后端代码
 │   ├── app/             # 应用主目录
 │   │   ├── api/         # API路由

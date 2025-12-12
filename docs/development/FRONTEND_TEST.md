@@ -10,7 +10,7 @@
 - API文档: http://localhost:8000/docs
 
 **前端服务**:
-- 开发服务器: http://localhost:5173 (或自动分配的端口，如5176)
+- 开发服务器: http://localhost:5173/it-doc-helper (或自动分配的端口，如5176)
 - 代理配置: `/api` -> `http://localhost:8000`
 - WebSocket: `/ws` -> `ws://localhost:8000`
 - **注意**: 如果5173端口被占用，Vite会自动使用下一个可用端口
@@ -32,7 +32,7 @@ npm run dev
 
 ### 2. 访问前端界面
 
-打开浏览器访问: **http://localhost:5173**
+打开浏览器访问: **http://localhost:5173/it-doc-helper**
 
 ### 3. 功能测试
 
@@ -40,7 +40,7 @@ npm run dev
 
 1. **进入上传页面**
    - 点击导航栏的"上传文档"
-   - 或直接访问: http://localhost:5173/upload
+   - 或直接访问: http://localhost:5173/it-doc-helper/upload
 
 2. **上传文档**
    - 拖拽文件到上传区域，或点击选择文件
@@ -94,7 +94,7 @@ npm run dev
 
 1. **访问历史页面**
    - 点击导航栏的"历史记录"
-   - 或访问: http://localhost:5173/history
+   - 或访问: http://localhost:5173/it-doc-helper/history
 
 2. **查看历史**
    - 显示所有已处理的文档列表

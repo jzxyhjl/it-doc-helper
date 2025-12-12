@@ -9,6 +9,7 @@ import History from './pages/History'
 function App() {
   return (
     <Router
+      basename="/it-doc-helper"
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true

@@ -6,7 +6,7 @@ from app.core.config import settings
 
 # 创建Celery应用
 celery_app = Celery(
-    "it_helper",
+    "it_doc_helper",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
     include=["app.tasks.document_processing"]
@@ -20,8 +20,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=600,  # 10分钟超时（大文档和多次AI调用需要更长时间）
-    task_soft_time_limit=540,  # 9分钟软超时
+    task_time_limit=1800,  # 30分钟超时（大文档、多次AI调用和向量生成需要更长时间）
+    task_soft_time_limit=1500,  # 25分钟软超时
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=50,
 )
