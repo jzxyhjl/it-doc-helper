@@ -31,7 +31,7 @@ docker-compose up -d
 4. **等待服务启动**（数据库会自动初始化）
 
 5. **访问应用**
-- 前端：http://localhost
+- 前端：http://localhost/it-doc-helper
 - API文档：http://localhost:8000/docs
 
 ## 服务状态
@@ -103,7 +103,7 @@ docker-compose up -d
 
 ## 访问地址
 
-- **前端**: http://localhost
+- **前端**: http://localhost/it-doc-helper
 - **API服务**: http://localhost:8000
 - **API文档**: http://localhost:8000/docs
 - **健康检查**: http://localhost:8000/health

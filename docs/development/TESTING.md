@@ -4,7 +4,8 @@
 
 ### 服务状态
 - ✅ **后端API**: http://localhost:8000 (运行中)
-- ✅ **前端服务**: http://localhost:5173 (运行中)
+- ✅ **前端服务（生产）**: http://localhost/it-doc-helper (运行中)
+- ✅ **前端服务（开发）**: http://localhost:5173/it-doc-helper (运行中)
 - ✅ **PostgreSQL**: 容器运行中 (healthy)
 - ✅ **Redis**: 容器运行中 (healthy)
 - ✅ **Celery Worker**: 容器运行中

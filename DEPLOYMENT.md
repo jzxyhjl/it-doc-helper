@@ -115,7 +115,7 @@ docker-compose ps
 
 ### 5. 访问应用
 
-- **前端界面**: http://localhost
+- **前端界面**: http://localhost/it-doc-helper
 - **API文档**: http://localhost:8000/docs
 - **健康检查**: http://localhost:8000/health
 

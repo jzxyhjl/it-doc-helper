@@ -20,13 +20,13 @@ echo ""
 
 # 测试前端
 echo "4. 测试前端..."
-curl -s -I http://localhost/ | head -5
+curl -s -I http://localhost/it-doc-helper/ | head -5
 echo ""
 
 echo "=== 测试完成 ==="
 echo ""
 echo "访问地址:"
-echo "  前端: http://localhost"
+echo "  前端: http://localhost/it-doc-helper"
 echo "  API文档: http://localhost:8000/docs"
 echo "  API健康检查: http://localhost:8000/health"
 
