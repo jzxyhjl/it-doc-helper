@@ -7,6 +7,8 @@ from typing import Optional
 import structlog
 import uuid
 import os
+import time
+import json
 
 from app.core.database import get_db, AsyncSessionLocal
 from sqlalchemy import select
@@ -123,10 +125,44 @@ async def upload_document(
     """
     from sqlalchemy import select
     
+    # #region agent log
     try:
+        log_data = {"location": "documents.py:113", "message": "upload_document entry", "data": {"filename": file.filename, "content_type": file.content_type}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "H"}
+        log_path = os.getenv("DEBUG_LOG_PATH", "/app/.cursor/debug.log")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # 忽略日志写入错误，不影响主流程
+    # #endregion
+    
+    try:
+        # #region agent log
+        try:
+            log_data = {"location": "documents.py:127", "message": "Before file validation", "data": {"filename": file.filename}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "I"}
+            log_path = os.getenv("DEBUG_LOG_PATH", "/app/.cursor/debug.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        
         # 验证文件类型
         file_ext = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
         allowed_exts = settings.get_allowed_extensions()
+        
+        # 特殊处理：.doc 格式提供友好提示
+        if file_ext == 'doc':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "系统暂不支持 .doc 格式（旧版 Word 文档）。"
+                    "请使用 Microsoft Word 或 LibreOffice 将文件另存为 .docx 格式后重新上传。"
+                    f"支持的类型: {', '.join(allowed_exts)}"
+                )
+            )
+        
         if file_ext not in allowed_exts:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -162,8 +198,50 @@ async def upload_document(
                               old_document_id=str(existing_document.id),
                               filename=file.filename)
         
+        # #region agent log
+        try:
+            log_data = {"location": "documents.py:177", "message": "Before reading file content", "data": {"filename": file.filename}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "J"}
+            log_path = os.getenv("DEBUG_LOG_PATH", "/app/.cursor/debug.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        
+        # 先读取文件内容以获取大小（不保存）
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        # #region agent log
+        try:
+            log_data = {"location": "documents.py:180", "message": "After reading file content", "data": {"filename": file.filename, "file_size": file_size}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "K"}
+            log_path = os.getenv("DEBUG_LOG_PATH", "/app/.cursor/debug.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        
+        # 验证文件大小
+        from app.services.document_size_validator import DocumentSizeValidator
+        try:
+            size_validation = DocumentSizeValidator.validate_file_size(file_size)
+            warnings = size_validation.get("warnings", [])
+            if warnings:
+                logger.warning("文件大小警告", filename=file.filename, warnings=warnings)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        
+        # 重置文件指针，准备保存
+        await file.seek(0)
+        
         # 保存文件
-        file_path, file_size = await save_upload_file(
+        file_path, _ = await save_upload_file(
             file=file,
             upload_dir=settings.UPLOAD_DIR,
             max_size=settings.UPLOAD_MAX_SIZE,
@@ -221,6 +299,17 @@ async def upload_document(
             detail=str(e)
         )
     except Exception as e:
+        # #region agent log
+        try:
+            import traceback
+            log_data = {"location": "documents.py:255", "message": "Exception caught", "data": {"error": str(e), "error_type": type(e).__name__, "traceback": traceback.format_exc()[:500]}, "timestamp": int(time.time() * 1000), "sessionId": "debug-session", "runId": "run1", "hypothesisId": "L"}
+            log_path = os.getenv("DEBUG_LOG_PATH", "/app/.cursor/debug.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # #endregion
         logger.error("文档上传失败", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

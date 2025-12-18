@@ -16,11 +16,20 @@ export const documentsApi = {
    * 上传文档
    */
   upload: async (file: File): Promise<DocumentUploadResponse> => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'documents.ts:18',message:'upload function entry',data:{fileName:file.name,fileSize:file.size,fileType:file.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     const formData = new FormData()
     formData.append('file', file)
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'documents.ts:23',message:'Before axios post',data:{baseURL:apiClient.defaults.baseURL,url:'/documents/upload'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     // 使用axios的默认行为，它会自动设置正确的Content-Type（包括boundary）
     const response = await apiClient.post('/documents/upload', formData)
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'documents.ts:26',message:'axios post succeeded',data:{status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
     
     return response.data
   },

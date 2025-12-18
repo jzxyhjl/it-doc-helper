@@ -6,6 +6,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Recommendations from '../components/Recommendations'
 import MermaidRenderer from '../components/MermaidRenderer'
 import ErrorBoundary from '../components/ErrorBoundary'
+import ConfidenceBadge from '../components/ConfidenceBadge'
+import SourceList from '../components/SourceList'
 import { documentsApi } from '../api/documents'
 import type { DocumentResultResponse } from '../types'
 import ReactMarkdown from 'react-markdown'
@@ -44,15 +46,38 @@ export default function Result() {
 
     const { document_type, result: resultData } = result
 
-    if (document_type === 'interview') {
-      return <InterviewResult data={resultData} />
-    } else if (document_type === 'technical') {
-      return <TechnicalResult data={resultData} />
-    } else if (document_type === 'architecture') {
-      return <ArchitectureResult data={resultData} />
+    // 数据验证和异常处理
+    if (!resultData) {
+      return (
+        <Card>
+          <div className="text-center py-8">
+            <p className="text-red-600 mb-4">处理结果数据为空</p>
+            <p className="text-sm text-gray-500">文档可能还在处理中，请稍后重试</p>
+          </div>
+        </Card>
+      )
     }
 
-    return <div className="text-gray-600">未知的文档类型</div>
+    try {
+      if (document_type === 'interview') {
+        return <InterviewResult data={resultData} />
+      } else if (document_type === 'technical') {
+        return <TechnicalResult data={resultData} />
+      } else if (document_type === 'architecture') {
+        return <ArchitectureResult data={resultData} />
+      }
+
+      return <div className="text-gray-600">未知的文档类型: {document_type}</div>
+    } catch (err: any) {
+      return (
+        <Card>
+          <div className="text-center py-8">
+            <p className="text-red-600 mb-4">结果展示失败</p>
+            <p className="text-sm text-gray-500">{err.message || '未知错误'}</p>
+          </div>
+        </Card>
+      )
+    }
   }
 
   if (loading) {
@@ -129,12 +154,67 @@ export default function Result() {
   )
 }
 
-// 面试题结果组件
+// 弱展示组件（默认隐藏，可点击展开）
+function WeakDisplay({ 
+  confidence, 
+  confidenceLabel, 
+  sources 
+}: { 
+  confidence?: number
+  confidenceLabel?: string
+  sources?: Array<{ id: number; text: string; position?: number }>
+}) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  if (confidence === undefined && (!sources || sources.length === 0)) {
+    return null
+  }
+
+  return (
+    <div className="mb-3 border-t border-gray-200 pt-3">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center text-xs text-gray-500 hover:text-gray-700"
+      >
+        <span className="mr-1">{isExpanded ? '▼' : '▶'}</span>
+        <span>查看可信度和来源</span>
+      </button>
+      
+      {isExpanded && (
+        <div className="mt-2 space-y-2">
+          {confidence !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600">可信度：</span>
+              <ConfidenceBadge 
+                label={confidenceLabel || '中'} 
+                score={confidence}
+              />
+            </div>
+          )}
+          {sources && sources.length > 0 && (
+            <SourceList sources={sources} collapsed={false} maxLength={200} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 面试题结果组件（弱展示模式）
 function InterviewResult({ data }: { data: any }) {
   return (
     <div className="space-y-6 text-left">
       <Card title="内容总结">
         <div className="space-y-4 text-left">
+          {/* 可信度和来源（弱展示：默认隐藏） */}
+          {(data.summary?.confidence !== undefined || data.summary?.sources?.length > 0) && (
+            <WeakDisplay 
+              confidence={data.summary?.confidence}
+              confidenceLabel={data.summary?.confidence_label}
+              sources={data.summary?.sources}
+            />
+          )}
+          
           {data.summary?.key_points && (
             <div>
               <h4 className="font-medium text-gray-900 mb-2">关键知识点</h4>
@@ -179,21 +259,52 @@ function InterviewResult({ data }: { data: any }) {
                 {q.hint && (
                   <p className="text-sm text-gray-600">提示: {q.hint}</p>
                 )}
+                {/* 可信度和来源（弱展示：默认隐藏） */}
+                {(q.confidence !== undefined || q.sources?.length > 0) && (
+                  <WeakDisplay 
+                    confidence={q.confidence}
+                    confidenceLabel={q.confidence_label}
+                    sources={q.sources}
+                  />
+                )}
               </div>
             ))}
           </div>
         </Card>
       )}
 
-      {data.extracted_answers && data.extracted_answers.length > 0 && (
+      {data.extracted_answers && (
         <Card title="提取的答案">
-          <div className="space-y-2 text-left">
-            {data.extracted_answers.map((answer: string, index: number) => (
-              <div key={index} className="bg-gray-50 rounded p-3 text-left">
-                <p className="text-gray-700 leading-relaxed">{answer}</p>
-              </div>
-            ))}
-          </div>
+          {/* 可信度和来源（弱展示：默认隐藏） */}
+          {(data.extracted_answers.confidence !== undefined || data.extracted_answers.sources?.length > 0) && (
+            <WeakDisplay 
+              confidence={data.extracted_answers.confidence}
+              confidenceLabel={data.extracted_answers.confidence_label}
+              sources={data.extracted_answers.sources}
+            />
+          )}
+          
+          {/* 答案列表 */}
+          {Array.isArray(data.extracted_answers) && data.extracted_answers.length > 0 && (
+            <div className="space-y-2 text-left">
+              {data.extracted_answers.map((answer: string, index: number) => (
+                <div key={index} className="bg-gray-50 rounded p-3 text-left">
+                  <p className="text-gray-700 leading-relaxed">{answer}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* 新格式：answers字段 */}
+          {data.extracted_answers.answers && data.extracted_answers.answers.length > 0 && (
+            <div className="space-y-2 text-left">
+              {data.extracted_answers.answers.map((answer: string, index: number) => (
+                <div key={index} className="bg-gray-50 rounded p-3 text-left">
+                  <p className="text-gray-700 leading-relaxed">{answer}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
     </div>
@@ -207,6 +318,17 @@ function TechnicalResult({ data }: { data: any }) {
       {data.prerequisites && (
         <Card title="前置条件">
           <div className="space-y-4">
+            {/* 可信度标签（完整展示） */}
+            {data.prerequisites.confidence !== undefined && (
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm text-gray-600">可信度：</span>
+                <ConfidenceBadge 
+                  label={data.prerequisites.confidence_label || '中'} 
+                  score={data.prerequisites.confidence}
+                />
+              </div>
+            )}
+            
             {data.prerequisites.required && data.prerequisites.required.length > 0 && (
               <div>
                 <h4 className="font-medium text-gray-900 mb-2">必须掌握</h4>
@@ -228,6 +350,11 @@ function TechnicalResult({ data }: { data: any }) {
                 </ul>
               </div>
             )}
+            
+            {/* 来源片段（完整展示） */}
+            {data.prerequisites.sources && data.prerequisites.sources.length > 0 && (
+              <SourceList sources={data.prerequisites.sources} collapsed={false} />
+            )}
           </div>
         </Card>
       )}
@@ -237,9 +364,18 @@ function TechnicalResult({ data }: { data: any }) {
           <div className="space-y-4 text-left">
             {data.learning_path.map((stage: any, index: number) => (
               <div key={index} className="border-l-4 border-primary-500 pl-4 text-left">
-                <h4 className="font-medium text-gray-900 mb-2">
-                  阶段 {stage.stage}: {stage.title}
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-gray-900">
+                    阶段 {stage.stage}: {stage.title}
+                  </h4>
+                  {/* 可信度标签（完整展示） */}
+                  {stage.confidence !== undefined && (
+                    <ConfidenceBadge 
+                      label={stage.confidence_label || '中'} 
+                      score={stage.confidence}
+                    />
+                  )}
+                </div>
                 <div className="text-gray-700 leading-relaxed text-left overflow-x-auto">
                   <ReactMarkdown 
                     remarkPlugins={[remarkGfm]}
@@ -248,6 +384,10 @@ function TechnicalResult({ data }: { data: any }) {
                     {stage.content}
                   </ReactMarkdown>
                 </div>
+                {/* 来源片段（完整展示） */}
+                {stage.sources && stage.sources.length > 0 && (
+                  <SourceList sources={stage.sources} collapsed={false} />
+                )}
               </div>
             ))}
           </div>
@@ -257,6 +397,17 @@ function TechnicalResult({ data }: { data: any }) {
       {data.learning_methods && (
         <Card title="学习方法建议">
           <div className="space-y-4 text-left">
+            {/* 可信度标签（完整展示） */}
+            {data.learning_methods.confidence !== undefined && (
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm text-gray-600">可信度：</span>
+                <ConfidenceBadge 
+                  label={data.learning_methods.confidence_label || '中'} 
+                  score={data.learning_methods.confidence}
+                />
+              </div>
+            )}
+            
             {data.learning_methods.theory && (
               <div className="text-left">
                 <h4 className="font-medium text-gray-900 mb-2">理论学习</h4>
@@ -324,29 +475,67 @@ function TechnicalResult({ data }: { data: any }) {
                 </div>
               </div>
             )}
+            
+            {/* 来源片段（完整展示） */}
+            {data.learning_methods.sources && data.learning_methods.sources.length > 0 && (
+              <SourceList sources={data.learning_methods.sources} collapsed={false} />
+            )}
           </div>
         </Card>
       )}
 
-      {data.related_technologies && data.related_technologies.length > 0 && (
+      {data.related_technologies && (
         <Card title="相关技术">
-          <div className="flex flex-wrap gap-2">
-            {data.related_technologies.map((tech: string, index: number) => (
-              <span
-                key={index}
-                className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
-              >
-                {tech}
-              </span>
-            ))}
-          </div>
+          {/* 可信度标签（完整展示） */}
+          {data.related_technologies.confidence !== undefined && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm text-gray-600">可信度：</span>
+              <ConfidenceBadge 
+                label={data.related_technologies.confidence_label || '中'} 
+                score={data.related_technologies.confidence}
+              />
+            </div>
+          )}
+          
+          {/* 技术列表 */}
+          {data.related_technologies.technologies && data.related_technologies.technologies.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {data.related_technologies.technologies.map((tech: string, index: number) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* 兼容旧格式（直接是数组） */}
+          {Array.isArray(data.related_technologies) && data.related_technologies.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {data.related_technologies.map((tech: string, index: number) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* 来源片段（完整展示） */}
+          {data.related_technologies.sources && data.related_technologies.sources.length > 0 && (
+            <SourceList sources={data.related_technologies.sources} collapsed={false} />
+          )}
         </Card>
       )}
     </div>
   )
 }
 
-// 架构文档结果组件
+// 架构文档结果组件（弱展示模式）
 function ArchitectureResult({ data }: { data: any }) {
   return (
     <div className="space-y-6 text-left">
@@ -390,6 +579,14 @@ function ArchitectureResult({ data }: { data: any }) {
                     {step.description}
                   </ReactMarkdown>
                 </div>
+                {/* 可信度和来源（弱展示：默认隐藏） */}
+                {(step.confidence !== undefined || step.sources?.length > 0) && (
+                  <WeakDisplay 
+                    confidence={step.confidence}
+                    confidenceLabel={step.confidence_label}
+                    sources={step.sources}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -480,20 +677,90 @@ function ArchitectureResult({ data }: { data: any }) {
         </Card>
       )}
 
-      {data.checklist && data.checklist.length > 0 && (
+      {data.checklist && (
         <Card title="配置检查清单">
-          <ul className="space-y-2 text-left">
-            {data.checklist.map((item: string, index: number) => (
-              <li key={index} className="flex items-start text-left">
-                <input
-                  type="checkbox"
-                  className="mt-1 mr-2"
-                  disabled
-                />
-                <span className="text-gray-700 text-left">{item}</span>
-              </li>
-            ))}
-          </ul>
+          {/* 可信度和来源（弱展示：默认隐藏） */}
+          {(data.checklist.confidence !== undefined || data.checklist.sources?.length > 0) && (
+            <WeakDisplay 
+              confidence={data.checklist.confidence}
+              confidenceLabel={data.checklist.confidence_label}
+              sources={data.checklist.sources}
+            />
+          )}
+          
+          {/* 检查清单列表 */}
+          {Array.isArray(data.checklist) && data.checklist.length > 0 && (
+            <ul className="space-y-2 text-left">
+              {data.checklist.map((item: string, index: number) => (
+                <li key={index} className="flex items-start text-left">
+                  <input
+                    type="checkbox"
+                    className="mt-1 mr-2"
+                    disabled
+                  />
+                  <span className="text-gray-700 text-left">{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          
+          {/* 新格式：items字段 */}
+          {data.checklist.items && data.checklist.items.length > 0 && (
+            <ul className="space-y-2 text-left">
+              {data.checklist.items.map((item: string, index: number) => (
+                <li key={index} className="flex items-start text-left">
+                  <input
+                    type="checkbox"
+                    className="mt-1 mr-2"
+                    disabled
+                  />
+                  <span className="text-gray-700 text-left">{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+      
+      {/* 相关技术（弱展示） */}
+      {data.related_technologies && (
+        <Card title="相关技术">
+          {/* 可信度和来源（弱展示：默认隐藏） */}
+          {(data.related_technologies.confidence !== undefined || data.related_technologies.sources?.length > 0) && (
+            <WeakDisplay 
+              confidence={data.related_technologies.confidence}
+              confidenceLabel={data.related_technologies.confidence_label}
+              sources={data.related_technologies.sources}
+            />
+          )}
+          
+          {/* 技术列表 */}
+          {data.related_technologies.technologies && data.related_technologies.technologies.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {data.related_technologies.technologies.map((tech: string, index: number) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
+          
+          {/* 兼容旧格式（直接是数组） */}
+          {Array.isArray(data.related_technologies) && data.related_technologies.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {data.related_technologies.map((tech: string, index: number) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
         </Card>
       )}
     </div>

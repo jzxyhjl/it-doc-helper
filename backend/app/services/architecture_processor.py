@@ -11,6 +11,8 @@ import structlog
 from app.utils.tech_name_utils import clean_tech_name, normalize_tech_name, are_tech_names_equivalent
 
 from app.services.ai_service import get_ai_service
+from app.services.source_segmenter import SourceSegmenter
+from app.services.confidence_calculator import ConfidenceCalculator
 
 logger = structlog.get_logger()
 
@@ -32,35 +34,82 @@ class ArchitectureProcessor:
         """
         logger.info("开始处理架构文档", content_length=len(content))
         
-        # 1. 配置流程提取
+        # 0. 段落切分（带异常处理）
+        try:
+            segments = SourceSegmenter.segment_content(content, timeout=5.0)
+            logger.info("段落切分完成", segments_count=len(segments), content_length=len(content))
+            # 如果段落切分返回空列表，使用兜底策略
+            if not segments:
+                logger.warning("段落切分返回空列表，使用兜底策略")
+                segments = SourceSegmenter._fallback_segment(content)
+                logger.info("兜底策略完成", segments_count=len(segments))
+        except Exception as e:
+            logger.error("段落切分失败，使用兜底策略", error=str(e))
+            segments = SourceSegmenter._fallback_segment(content)  # 使用兜底策略而不是空列表
+        
+        # 1. 配置流程提取（带异常处理）
         if progress_callback:
             await progress_callback(65, "处理架构文档（步骤1/5：提取配置流程）...")
-        config_steps = await ArchitectureProcessor._extract_config_steps(content)
+        try:
+            config_steps = await ArchitectureProcessor._extract_config_steps(content, segments)
+        except Exception as e:
+            logger.error("配置流程提取失败，使用默认值", error=str(e))
+            config_steps = []
         
-        # 2. 组件识别
+        # 2. 组件识别（带异常处理）
         if progress_callback:
             await progress_callback(70, "处理架构文档（步骤2/5：识别组件）...")
-        components = await ArchitectureProcessor._identify_components(content)
+        try:
+            components = await ArchitectureProcessor._identify_components(content, segments)
+        except Exception as e:
+            logger.error("组件识别失败，使用默认值", error=str(e))
+            components = []
         
-        # 3. 全景视图生成
+        # 3. 全景视图生成（带异常处理）
         if progress_callback:
             await progress_callback(75, "处理架构文档（步骤3/5：生成架构视图）...")
-        architecture_view = await ArchitectureProcessor._generate_architecture_view(content, components)
+        try:
+            architecture_view = await ArchitectureProcessor._generate_architecture_view(content, segments, components)
+        except Exception as e:
+            logger.error("全景视图生成失败，使用默认值", error=str(e))
+            architecture_view = "系统架构视图生成失败，请查看原始文档。"
         
-        # 4. 白话串讲
+        # 4. 白话串讲（带异常处理）
         if progress_callback:
             await progress_callback(80, "处理架构文档（步骤4/5：生成白话解释）...")
-        plain_explanation = await ArchitectureProcessor._generate_plain_explanation(content)
+        try:
+            plain_explanation = await ArchitectureProcessor._generate_plain_explanation(content, segments)
+        except Exception as e:
+            logger.error("白话串讲生成失败，使用默认值", error=str(e))
+            plain_explanation = "白话解释生成失败，请查看原始文档。"
         
-        # 5. 配置检查清单
+        # 5. 配置检查清单（带异常处理）
         if progress_callback:
             await progress_callback(85, "处理架构文档（步骤5/5：生成检查清单）...")
-        checklist = await ArchitectureProcessor._generate_checklist(content, config_steps)
+        try:
+            checklist = await ArchitectureProcessor._generate_checklist(content, segments, config_steps)
+        except Exception as e:
+            logger.error("检查清单生成失败，使用默认值", error=str(e))
+            checklist = {
+                "items": [],
+                "confidence": None,
+                "confidence_label": None,
+                "sources": []
+            }
         
-        # 6. 提取相关技术栈（用于知识图谱）
+        # 6. 提取相关技术栈（带异常处理）
         if progress_callback:
             await progress_callback(88, "处理架构文档（提取技术栈）...")
-        related_technologies = await ArchitectureProcessor._extract_related_technologies(content, components)
+        try:
+            related_technologies = await ArchitectureProcessor._extract_related_technologies(content, segments, components)
+        except Exception as e:
+            logger.error("技术栈提取失败，使用默认值", error=str(e))
+            related_technologies = {
+                "technologies": [],
+                "confidence": None,
+                "confidence_label": None,
+                "sources": []
+            }
         
         result = {
             "config_steps": config_steps,
@@ -79,7 +128,7 @@ class ArchitectureProcessor:
         return result
     
     @staticmethod
-    async def _extract_config_steps(content: str) -> List[Dict]:
+    async def _extract_config_steps(content: str, segments: List[Dict]) -> List[Dict]:
         """提取配置流程"""
         ai_service = get_ai_service()
         
@@ -153,11 +202,13 @@ class ArchitectureProcessor:
         system_prompt = "你是一个系统架构专家，擅长从文档中提取完整、可操作的配置流程。必须提取所有实际的配置步骤，不要遗漏任何方法或环节。"
         
         try:
-            # 第一次尝试
-            steps = await ai_service.generate_json(
+            # 第一次尝试（弱展示：不强制要求source_ids和confidence）
+            steps = await ai_service.generate_with_sources(
                 prompt=prompt,
+                segments=segments,
                 system_prompt=system_prompt,
-                temperature=0.3
+                temperature=0.3,
+                require_confidence=False  # 弱展示，不强制要求
             )
             
             # 确保返回列表格式
@@ -166,7 +217,7 @@ class ArchitectureProcessor:
             elif not isinstance(steps, list):
                 steps = []
             
-            # 验证和格式化
+            # 验证和格式化，添加可信度和来源（弱展示）
             validated_steps = []
             for step in steps[:30]:  # 最多30个步骤
                 if isinstance(step, dict):
@@ -177,11 +228,45 @@ class ArchitectureProcessor:
                     # 扩展过滤关键词，包括"选择"、"回顾"等非配置操作
                     filter_keywords = ["回顾", "背景", "介绍", "概述", "了解", "发展历程", "历史", "起源", "选择", "对比", "比较"]
                     if title and description and not any(keyword in title_lower for keyword in filter_keywords):
-                        validated_steps.append({
+                        step_item = {
                             "step": len(validated_steps) + 1,  # 重新编号
                             "title": title,
                             "description": description
-                        })
+                        }
+                        
+                        # 弱展示：如果AI返回了可信度和来源，则添加
+                        if "confidence" in step or "source_ids" in step:
+                            base_confidence = ConfidenceCalculator.normalize_confidence(
+                                step.get("confidence")
+                            )
+                            source_ids = step.get("source_ids", [])
+                            
+                            confidence_result = ConfidenceCalculator.calculate_confidence(
+                                base_confidence=base_confidence,
+                                source_ids=source_ids,
+                                segments=segments,
+                                content=content,
+                                ai_response=str(step)
+                            )
+                            
+                            step_item["confidence"] = confidence_result["score"]
+                            step_item["confidence_label"] = confidence_result["label"]
+                            
+                            # 添加来源片段（弱展示，截断显示）
+                            if source_ids:
+                                source_segments = SourceSegmenter.get_segments_by_ids(segments, source_ids)
+                                step_item["sources"] = [
+                                    {
+                                        "id": seg["id"],
+                                        "text": seg["text"][:200] + "..." if len(seg["text"]) > 200 else seg["text"],
+                                        "position": seg["position"]
+                                    }
+                                    for seg in source_segments
+                                ]
+                            else:
+                                step_item["sources"] = []
+                        
+                        validated_steps.append(step_item)
             
             # 如果步骤太少（少于5个），尝试第二次提取
             logger.info("配置步骤验证完成", 
@@ -230,10 +315,12 @@ class ArchitectureProcessor:
 **必须返回至少10个步骤，不要只返回1-2个步骤。**"""
                 
                 try:
-                    retry_steps = await ai_service.generate_json(
+                    retry_steps = await ai_service.generate_with_sources(
                         prompt=retry_prompt,
+                        segments=segments,
                         system_prompt="你是一个系统架构专家，必须提取至少10个实际配置步骤，不要只提取背景介绍。",
-                        temperature=0.2  # 降低温度，更确定性
+                        temperature=0.2,  # 降低温度，更确定性
+                        require_confidence=False  # 弱展示
                     )
                     
                     # 验证二次提取结果
@@ -247,11 +334,44 @@ class ArchitectureProcessor:
                                 # 扩展过滤关键词
                                 filter_keywords = ["回顾", "背景", "介绍", "概述", "了解", "发展历程", "历史", "起源", "选择", "对比", "比较"]
                                 if title and description and not any(keyword in title_lower for keyword in filter_keywords):
-                                    retry_validated.append({
+                                    step_item = {
                                         "step": len(retry_validated) + 1,
                                         "title": title,
                                         "description": description
-                                    })
+                                    }
+                                    
+                                    # 弱展示：如果AI返回了可信度和来源，则添加
+                                    if "confidence" in step or "source_ids" in step:
+                                        base_confidence = ConfidenceCalculator.normalize_confidence(
+                                            step.get("confidence")
+                                        )
+                                        source_ids = step.get("source_ids", [])
+                                        
+                                        confidence_result = ConfidenceCalculator.calculate_confidence(
+                                            base_confidence=base_confidence,
+                                            source_ids=source_ids,
+                                            segments=segments,
+                                            content=content,
+                                            ai_response=str(step)
+                                        )
+                                        
+                                        step_item["confidence"] = confidence_result["score"]
+                                        step_item["confidence_label"] = confidence_result["label"]
+                                        
+                                        if source_ids:
+                                            source_segments = SourceSegmenter.get_segments_by_ids(segments, source_ids)
+                                            step_item["sources"] = [
+                                                {
+                                                    "id": seg["id"],
+                                                    "text": seg["text"][:200] + "..." if len(seg["text"]) > 200 else seg["text"],
+                                                    "position": seg["position"]
+                                                }
+                                                for seg in source_segments
+                                            ]
+                                        else:
+                                            step_item["sources"] = []
+                                    
+                                    retry_validated.append(step_item)
                         
                         # 如果二次提取的结果更好，使用它
                         if len(retry_validated) > len(validated_steps):
@@ -277,7 +397,7 @@ class ArchitectureProcessor:
             return []
     
     @staticmethod
-    async def _identify_components(content: str) -> List[Dict]:
+    async def _identify_components(content: str, segments: List[Dict]) -> List[Dict]:
         """识别组件"""
         ai_service = get_ai_service()
         
@@ -368,11 +488,13 @@ class ArchitectureProcessor:
 4. 不要只识别基础设施组件，必须识别所有层次的组件（应用层、框架层、集成层、基础设施层）"""
         
         try:
-            # 第一次尝试
-            components = await ai_service.generate_json(
+            # 第一次尝试（弱展示：不强制要求source_ids和confidence）
+            components = await ai_service.generate_with_sources(
                 prompt=prompt,
+                segments=segments,
                 system_prompt=system_prompt,
-                temperature=0.3
+                temperature=0.3,
+                require_confidence=False  # 弱展示
             )
             
             # 确保返回列表格式
@@ -504,10 +626,12 @@ class ArchitectureProcessor:
 **必须返回至少5个组件，不要只返回1-2个组件。**"""
                 
                 try:
-                    retry_components = await ai_service.generate_json(
+                    retry_components = await ai_service.generate_with_sources(
                         prompt=retry_prompt,
+                        segments=segments,
                         system_prompt="你是一个系统架构专家，必须识别至少5个组件，不要只识别基础设施组件。",
-                        temperature=0.2  # 降低温度，更确定性
+                        temperature=0.2,  # 降低温度，更确定性
+                        require_confidence=False  # 弱展示
                     )
                     
                     # 验证二次识别结果
@@ -603,7 +727,7 @@ class ArchitectureProcessor:
             return []
     
     @staticmethod
-    async def _generate_architecture_view(content: str, components: List[Dict]) -> str:
+    async def _generate_architecture_view(content: str, segments: List[Dict], components: List[Dict]) -> str:
         """生成组件全景视图"""
         ai_service = get_ai_service()
         
@@ -770,7 +894,7 @@ graph TB
         return cleaned_text
     
     @staticmethod
-    async def _generate_plain_explanation(content: str) -> str:
+    async def _generate_plain_explanation(content: str, segments: List[Dict]) -> str:
         """生成白话串讲"""
         ai_service = get_ai_service()
         
@@ -863,7 +987,7 @@ graph TB
         return '\n'.join(cleaned_lines)
     
     @staticmethod
-    async def _generate_checklist(content: str, config_steps: List[Dict]) -> List[str]:
+    async def _generate_checklist(content: str, segments: List[Dict], config_steps: List[Dict]) -> List[Dict]:
         """生成配置检查清单"""
         ai_service = get_ai_service()
         
@@ -889,26 +1013,79 @@ graph TB
         system_prompt = "你是一个系统运维专家，擅长制定配置检查清单。"
         
         try:
-            checklist = await ai_service.generate_json(
+            result = await ai_service.generate_with_sources(
                 prompt=prompt,
+                segments=segments,
                 system_prompt=system_prompt,
-                temperature=0.4
+                temperature=0.4,
+                require_confidence=False  # 弱展示
             )
+            
+            # 提取checklist列表
+            if isinstance(result, dict) and "checklist" in result:
+                checklist = result["checklist"]
+            elif isinstance(result, list):
+                checklist = result
+            elif isinstance(result, dict):
+                # 尝试从其他字段提取
+                checklist = result.get("items", result.get("checks", []))
+            else:
+                checklist = []
             
             # 确保返回列表格式
             if isinstance(checklist, list):
-                return checklist[:20]  # 限制数量
-            elif isinstance(checklist, dict) and "checklist" in checklist:
-                return checklist["checklist"][:20]
+                checklist_items = checklist[:20]  # 限制数量
             else:
-                return []
+                checklist_items = []
+            
+            # 弱展示：如果AI返回了可信度和来源，则添加
+            if isinstance(result, dict) and ("confidence" in result or "source_ids" in result):
+                base_confidence = ConfidenceCalculator.normalize_confidence(
+                    result.get("confidence")
+                )
+                source_ids = result.get("source_ids", [])
+                
+                confidence_result = ConfidenceCalculator.calculate_confidence(
+                    base_confidence=base_confidence,
+                    source_ids=source_ids,
+                    segments=segments,
+                    content=content,
+                    ai_response=str(checklist_items)
+                )
+                
+                return {
+                    "items": checklist_items,
+                    "confidence": confidence_result["score"],
+                    "confidence_label": confidence_result["label"],
+                    "sources": [
+                        {
+                            "id": seg["id"],
+                            "text": seg["text"][:200] + "..." if len(seg["text"]) > 200 else seg["text"],
+                            "position": seg["position"]
+                        }
+                        for seg in SourceSegmenter.get_segments_by_ids(segments, source_ids)
+                    ] if source_ids else []
+                }
+            else:
+                # 兼容旧格式
+                return {
+                    "items": checklist_items,
+                    "confidence": None,
+                    "confidence_label": None,
+                    "sources": []
+                }
                 
         except Exception as e:
             logger.error("检查清单生成失败", error=str(e))
-            return []
+            return {
+                "items": [],
+                "confidence": None,
+                "confidence_label": None,
+                "sources": []
+            }
     
     @staticmethod
-    async def _extract_related_technologies(content: str, components: List[Dict]) -> List[str]:
+    async def _extract_related_technologies(content: str, segments: List[Dict], components: List[Dict]) -> List[Dict]:
         """提取相关技术栈"""
         ai_service = get_ai_service()
         
@@ -938,39 +1115,69 @@ graph TB
         system_prompt = "你是一个技术架构专家，擅长识别技术栈和技术名词。"
         
         try:
-            technologies = await ai_service.generate_json(
+            result = await ai_service.generate_with_sources(
                 prompt=prompt,
+                segments=segments,
                 system_prompt=system_prompt,
-                temperature=0.3
+                temperature=0.3,
+                require_confidence=False  # 弱展示
             )
             
-            # 确保返回列表格式
-            if isinstance(technologies, list):
-                # 清理和验证技术名词，同时清理中文翻译
-                import re
-                validated_techs = []
-                for tech in technologies:
-                    if isinstance(tech, str) and tech.strip():
-                        tech_clean = clean_tech_name(tech)
-                        # 过滤掉太短或太长的词
-                        if 2 <= len(tech_clean) <= 50:
-                            validated_techs.append(tech_clean)
-                return validated_techs[:20]  # 限制数量
-            elif isinstance(technologies, dict) and "technologies" in technologies:
-                techs = technologies["technologies"]
-                if isinstance(techs, list):
-                    # 清理和验证技术名词，同时清理中文翻译
-                    validated_techs = []
-                    for tech in techs:
-                        if isinstance(tech, str) and tech.strip():
-                            tech_clean = clean_tech_name(tech)
-                            # 过滤掉太短或太长的词
-                            if 2 <= len(tech_clean) <= 50:
-                                validated_techs.append(tech_clean)
-                    return validated_techs[:20]
-                return []
+            # 提取technologies列表
+            if isinstance(result, dict) and "technologies" in result:
+                technologies = result["technologies"]
+            elif isinstance(result, list):
+                technologies = result
             else:
-                return []
+                technologies = []
+            
+            # 清理和验证技术名词
+            validated_techs = []
+            for tech in technologies:
+                if isinstance(tech, str) and tech.strip():
+                    tech_clean = clean_tech_name(tech)
+                    # 过滤掉太短或太长的词
+                    if 2 <= len(tech_clean) <= 50:
+                        validated_techs.append(tech_clean)
+            
+            validated_techs = validated_techs[:20]  # 限制数量
+            
+            # 弱展示：如果AI返回了可信度和来源，则添加
+            if isinstance(result, dict) and ("confidence" in result or "source_ids" in result):
+                base_confidence = ConfidenceCalculator.normalize_confidence(
+                    result.get("confidence")
+                )
+                source_ids = result.get("source_ids", [])
+                
+                confidence_result = ConfidenceCalculator.calculate_confidence(
+                    base_confidence=base_confidence,
+                    source_ids=source_ids,
+                    segments=segments,
+                    content=content,
+                    ai_response=str(validated_techs)
+                )
+                
+                return {
+                    "technologies": validated_techs,
+                    "confidence": confidence_result["score"],
+                    "confidence_label": confidence_result["label"],
+                    "sources": [
+                        {
+                            "id": seg["id"],
+                            "text": seg["text"][:200] + "..." if len(seg["text"]) > 200 else seg["text"],
+                            "position": seg["position"]
+                        }
+                        for seg in SourceSegmenter.get_segments_by_ids(segments, source_ids)
+                    ] if source_ids else []
+                }
+            else:
+                # 兼容旧格式
+                return {
+                    "technologies": validated_techs,
+                    "confidence": None,
+                    "confidence_label": None,
+                    "sources": []
+                }
                 
         except Exception as e:
             logger.error("技术栈提取失败，尝试从组件中提取", error=str(e))
