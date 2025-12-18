@@ -19,11 +19,24 @@ export default function FileUpload({
   const [error, setError] = useState<string | null>(null)
 
   const validateFile = (file: File): string | null => {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || ''
+    
+    // 特殊处理：检测 .doc 格式并提供友好提示
+    if (fileExt === 'doc') {
+      return '系统暂不支持 .doc 格式（旧版 Word 文档）。请使用 Microsoft Word 或 LibreOffice 将文件另存为 .docx 格式后重新上传。'
+    }
+    
     if (!isValidFileType(file.name, allowedTypes)) {
-      return `不支持的文件类型。支持的类型: ${allowedTypes.join(', ')}`
+      return `不支持的文件类型。支持的类型: ${allowedTypes.join(', ').toUpperCase()}`
     }
     if (file.size > maxSize) {
-      return `文件大小超过限制 (${formatFileSize(maxSize)})`
+      return `文件大小超过限制 (${formatFileSize(maxSize)})。建议拆分后处理。`
+    }
+    // 警告阈值：20MB
+    const warningThreshold = 20 * 1024 * 1024
+    if (file.size > warningThreshold) {
+      // 不阻止上传，但会在控制台记录警告
+      console.warn(`文件较大 (${formatFileSize(file.size)})，处理时间可能较长`)
     }
     return null
   }
@@ -106,6 +119,9 @@ export default function FileUpload({
             </p>
             <p className="text-sm text-gray-500">
               支持 {allowedTypes.join(', ').toUpperCase()} 格式，最大 {formatFileSize(maxSize)}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              提示：如使用旧版 Word 文档（.doc），请先转换为 .docx 格式
             </p>
           </div>
         </label>

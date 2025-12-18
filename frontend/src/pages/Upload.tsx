@@ -25,13 +25,26 @@ export default function Upload() {
     setIsUploading(true)
     setError(null)
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Upload.tsx:22',message:'handleUpload started',data:{fileName:selectedFile.name,fileSize:selectedFile.size,fileType:selectedFile.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Upload.tsx:29',message:'Before API call',data:{fileName:selectedFile.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const response = await documentsApi.upload(selectedFile)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Upload.tsx:31',message:'API call succeeded',data:{documentId:response.document_id,taskId:response.task_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       setCurrentDocument(response.document_id, response.task_id)
       
       // 跳转到进度页面
       navigate(`/progress/${response.document_id}`)
     } catch (err: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/eeaccba4-a712-43c7-b379-db4639c44cbf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Upload.tsx:35',message:'API call failed',data:{error:err.message,status:err.response?.status,statusText:err.response?.statusText,detail:err.response?.data?.detail,code:err.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       setError(err.response?.data?.detail || err.message || '上传失败，请重试')
     } finally {
       setIsUploading(false)
@@ -80,6 +93,12 @@ export default function Upload() {
               <li>Markdown (.md)</li>
               <li>纯文本 (.txt)</li>
             </ul>
+            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800 font-medium">⚠️ 格式提示</p>
+              <p className="text-yellow-700 text-xs mt-1">
+                暂不支持旧版 Word 文档（.doc）。如使用 .doc 格式，请使用 Microsoft Word 或 LibreOffice 将文件另存为 .docx 格式后重新上传。
+              </p>
+            </div>
             <p className="mt-2">文件大小限制：30MB</p>
           </div>
         </div>

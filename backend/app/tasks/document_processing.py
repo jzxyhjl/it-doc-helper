@@ -16,10 +16,18 @@ from app.models.processing_result import ProcessingResult
 from app.models.processing_task import ProcessingTask
 from app.models.system_learning_data import SystemLearningData
 from app.services.document_extractor import DocumentExtractor
+from app.services.text_preprocessor import TextPreprocessor
 from app.services.document_classifier import DocumentClassifier
 from app.services.interview_processor import InterviewProcessor
 from app.services.technical_processor import TechnicalProcessor
 from app.services.architecture_processor import ArchitectureProcessor
+from app.utils.processing_exception import (
+    ProcessingException,
+    ProcessingStatus,
+    ErrorType,
+    UserActionMapper
+)
+from app.services.document_size_validator import DocumentSizeValidator
 from sqlalchemy import select
 
 logger = structlog.get_logger()
@@ -96,20 +104,167 @@ def process_document_task(self, document_id: str, task_id: str):
                 
                 logger.info("开始处理文档", document_id=document_id, filename=document.filename)
                 
-                # 步骤1: 提取文档内容 (0-20%)
+                # 步骤1: 提取文档内容 (0-15%)
                 await update_progress(task_id, 10, "提取文档内容中...", "running")
                 try:
                     content = await DocumentExtractor.extract(document.file_path, document.file_type)
                     document.content_extracted = content
                     await db.commit()
-                    await update_progress(task_id, 20, "内容提取完成", "running")
+                    await update_progress(task_id, 15, "内容提取完成", "running")
                     logger.info("文档内容提取完成", document_id=document_id, content_length=len(content))
-                except Exception as e:
+                    
+                    # 验证内容长度和处理时间（在提取后）
+                    from app.services.document_size_validator import DocumentSizeValidator
+                    try:
+                        # 先尝试识别文档类型（如果已识别）
+                        detected_type = "technical"  # 默认类型，后续会被实际识别结果覆盖
+                        content_validation = DocumentSizeValidator.validate_content_length(
+                            len(content), detected_type
+                        )
+                        warnings = content_validation.get("warnings", [])
+                        estimated_time = content_validation.get("estimated_time")
+                        if warnings:
+                            logger.warning(
+                                "文档内容长度警告",
+                                document_id=document_id,
+                                content_length=len(content),
+                                estimated_time=estimated_time,
+                                warnings=warnings
+                            )
+                    except ValueError as e:
+                        # 内容过长或处理时间过长，拒绝处理
+                        logger.error(
+                            "文档内容验证失败",
+                            document_id=document_id,
+                            content_length=len(content),
+                            error=str(e)
+                        )
+                        document.status = "failed"
+                        await db.commit()
+                        await update_progress(
+                            task_id, 
+                            0, 
+                            f"文档过大: {str(e)}", 
+                            "failed"
+                        )
+                        return
+                except FileNotFoundError as e:
+                    # 文件不存在
+                    error = ProcessingException(
+                        status=ProcessingStatus.FAILED,
+                        error_type=ErrorType.INVALID_FILE,
+                        error_message=f"文件不存在: {str(e)}",
+                        error_details={
+                            "step": "内容提取",
+                            "reason": "文件不存在或已被删除"
+                        },
+                        user_actions=UserActionMapper.get_actions_for_error(
+                            ErrorType.INVALID_FILE, {}
+                        )
+                    )
+                    logger.error("内容提取失败：文件不存在", document_id=document_id, error=str(e))
+                    document.status = "failed"
+                    await db.commit()
+                    await update_progress(task_id, 0, error.error_message, "failed")
+                    return
+                except ValueError as e:
+                    # 文件格式不支持或内容为空
+                    error_msg = str(e)
+                    if "不支持" in error_msg or "格式" in error_msg:
+                        error = ProcessingException(
+                            status=ProcessingStatus.FAILED,
+                            error_type=ErrorType.UNSUPPORTED_FORMAT,
+                            error_message=error_msg,
+                            error_details={
+                                "step": "内容提取",
+                                "reason": "文件格式不支持"
+                            },
+                            user_actions=UserActionMapper.get_actions_for_error(
+                                ErrorType.UNSUPPORTED_FORMAT,
+                                {"supported_formats": "PDF, Word, PPT, Markdown, TXT"}
+                            )
+                        )
+                    elif "内容过少" in error_msg or len(content) < 50:
+                        error = ProcessingException(
+                            status=ProcessingStatus.FAILED,
+                            error_type=ErrorType.CONTENT_TOO_SHORT,
+                            error_message="文档内容过少，无法处理",
+                            error_details={
+                                "step": "内容提取",
+                                "reason": f"内容长度: {len(content) if 'content' in locals() else 0} 字符"
+                            },
+                            user_actions=UserActionMapper.get_actions_for_error(
+                                ErrorType.CONTENT_TOO_SHORT, {}
+                            )
+                        )
+                    else:
+                        error = ProcessingException(
+                            status=ProcessingStatus.FAILED,
+                            error_type=ErrorType.INVALID_FILE,
+                            error_message=error_msg,
+                            error_details={
+                                "step": "内容提取",
+                                "reason": str(e)
+                            },
+                            user_actions=UserActionMapper.get_actions_for_error(
+                                ErrorType.INVALID_FILE, {}
+                            )
+                        )
                     logger.error("内容提取失败", document_id=document_id, error=str(e))
                     document.status = "failed"
                     await db.commit()
-                    await update_progress(task_id, 0, f"内容提取失败: {str(e)}", "failed")
+                    await update_progress(task_id, 0, error.error_message, "failed")
                     return
+                except Exception as e:
+                    # 其他异常
+                    error = ProcessingException(
+                        status=ProcessingStatus.FAILED,
+                        error_type=ErrorType.INVALID_FILE,
+                        error_message=f"内容提取失败: {str(e)[:100]}",
+                        error_details={
+                            "step": "内容提取",
+                            "reason": str(e),
+                            "error_type": type(e).__name__
+                        },
+                        user_actions=UserActionMapper.get_actions_for_error(
+                            ErrorType.INVALID_FILE, {}
+                        )
+                    )
+                    logger.error("内容提取失败", document_id=document_id, error=str(e), error_type=type(e).__name__)
+                    document.status = "failed"
+                    await db.commit()
+                    await update_progress(task_id, 0, error.error_message, "failed")
+                    return
+                
+                # 步骤1.5: 文本预处理 (15-20%)
+                await update_progress(task_id, 18, "文本预处理中...", "running")
+                try:
+                    preprocess_result = await TextPreprocessor.preprocess(
+                        content=content,
+                        file_type=document.file_type,
+                        timeout=10.0
+                    )
+                    content = preprocess_result["cleaned_content"]
+                    preprocess_stats = preprocess_result["stats"]
+                    
+                    logger.info(
+                        "文本预处理完成",
+                        document_id=document_id,
+                        original_length=preprocess_stats["original_length"],
+                        cleaned_length=preprocess_stats["cleaned_length"],
+                        removed_chars=preprocess_stats["removed_chars"],
+                        removed_paragraphs=preprocess_stats["removed_paragraphs"]
+                    )
+                    await update_progress(task_id, 20, "文本预处理完成", "running")
+                except Exception as e:
+                    # 预处理失败时使用原始内容继续，记录警告
+                    logger.warning(
+                        "文本预处理失败，使用原始内容继续",
+                        document_id=document_id,
+                        error=str(e)
+                    )
+                    # 不中断处理流程，继续使用原始content
+                    await update_progress(task_id, 20, "文本预处理跳过", "running")
                 
                 # 步骤2: 识别文档类型 (20-40%)
                 await update_progress(task_id, 30, "识别文档类型中...", "running")
@@ -123,6 +278,41 @@ def process_document_task(self, document_id: str, task_id: str):
                     detected_type = classification['type']
                     confidence = classification.get('confidence', 0.0)
                     method = classification.get('method', 'unknown')
+                    
+                    # 根据识别的文档类型，重新验证处理时间
+                    from app.services.document_size_validator import DocumentSizeValidator
+                    try:
+                        content_validation = DocumentSizeValidator.validate_content_length(
+                            len(content), detected_type
+                        )
+                        estimated_time = content_validation.get("estimated_time")
+                        warnings = content_validation.get("warnings", [])
+                        logger.info(
+                            "文档处理时间估算",
+                            document_id=document_id,
+                            doc_type=detected_type,
+                            content_length=len(content),
+                            estimated_time=estimated_time,
+                            warnings=warnings
+                        )
+                    except ValueError as e:
+                        # 如果重新验证失败（可能因为类型不同导致时间估算不同），拒绝处理
+                        logger.error(
+                            "文档处理时间验证失败",
+                            document_id=document_id,
+                            doc_type=detected_type,
+                            content_length=len(content),
+                            error=str(e)
+                        )
+                        document.status = "failed"
+                        await db.commit()
+                        await update_progress(
+                            task_id,
+                            0,
+                            f"文档过大: {str(e)}",
+                            "failed"
+                        )
+                        return
                     
                     # 保存类型识别结果
                     doc_type = DocumentType(
@@ -147,6 +337,7 @@ def process_document_task(self, document_id: str, task_id: str):
                 # 步骤3: 根据类型处理文档 (40-90%)
                 await update_progress(task_id, 50, "AI处理文档中...", "running")
                 start_time = datetime.now()
+                PROCESSING_TIMEOUT = 600  # 10分钟超时
                 
                 try:
                     if detected_type == "interview":
@@ -169,23 +360,113 @@ def process_document_task(self, document_id: str, task_id: str):
                         detected_type = "technical"
                         await update_progress(task_id, 60, "自动判断为技术文档...", "running")
                     
-                    # 调用处理器
+                    # 调用处理器（带超时检测）
                     if detected_type == "architecture":
                         # 架构文档处理需要进度回调
                         async def progress_callback(progress, stage):
+                            # 检查超时
+                            elapsed = (datetime.now() - start_time).total_seconds()
+                            if elapsed > PROCESSING_TIMEOUT:
+                                raise ProcessingException(
+                                    status=ProcessingStatus.TIMEOUT,
+                                    error_type=ErrorType.TIMEOUT,
+                                    error_message=f"处理超时（超过{PROCESSING_TIMEOUT}秒）",
+                                    error_details={
+                                        "step": "AI处理",
+                                        "elapsed_time": elapsed,
+                                        "timeout": PROCESSING_TIMEOUT
+                                    },
+                                    user_actions=UserActionMapper.get_actions_for_error(
+                                        ErrorType.TIMEOUT, {}
+                                    )
+                                )
                             await update_progress(task_id, progress, stage, "running")
                         result_data = await processor.process(content, progress_callback=progress_callback)
                     else:
                         result_data = await processor.process(content)
+                    
+                    # 检查处理时间
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    if elapsed > PROCESSING_TIMEOUT:
+                        raise ProcessingException(
+                            status=ProcessingStatus.TIMEOUT,
+                            error_type=ErrorType.TIMEOUT,
+                            error_message=f"处理超时（超过{PROCESSING_TIMEOUT}秒）",
+                            error_details={
+                                "step": "AI处理",
+                                "elapsed_time": elapsed,
+                                "timeout": PROCESSING_TIMEOUT
+                            },
+                            user_actions=UserActionMapper.get_actions_for_error(
+                                ErrorType.TIMEOUT, {}
+                            )
+                        )
+                    
                     await update_progress(task_id, 80, "AI处理完成", "running")
                     
+                except ProcessingException as e:
+                    # 明确的处理异常
+                    logger.error(
+                        "文档处理失败（明确异常）",
+                        document_id=document_id,
+                        status=e.status.value,
+                        error_type=e.error_type.value,
+                        error_message=e.error_message
+                    )
+                    document.status = e.status.value
+                    await db.commit()
+                    await update_progress(task_id, 0, e.error_message, e.status.value)
+                    return
+                except asyncio.TimeoutError:
+                    # 异步超时
+                    error = ProcessingException(
+                        status=ProcessingStatus.TIMEOUT,
+                        error_type=ErrorType.TIMEOUT,
+                        error_message=f"处理超时（超过{PROCESSING_TIMEOUT}秒）",
+                        error_details={
+                            "step": "AI处理",
+                            "timeout": PROCESSING_TIMEOUT
+                        },
+                        user_actions=UserActionMapper.get_actions_for_error(
+                            ErrorType.TIMEOUT, {}
+                        )
+                    )
+                    logger.error("文档处理超时", document_id=document_id)
+                    document.status = "timeout"
+                    await db.commit()
+                    await update_progress(task_id, 0, error.error_message, "timeout")
+                    return
                 except Exception as e:
-                    logger.error("文档处理失败", document_id=document_id, error=str(e))
+                    # 其他异常（可能是AI调用失败）
+                    error_msg = str(e)
+                    error_type = ErrorType.AI_CALL_FAILED
+                    if "API" in error_msg or "api" in error_msg or "key" in error_msg.lower():
+                        error_type = ErrorType.AI_CALL_FAILED
+                    elif "timeout" in error_msg.lower() or "超时" in error_msg:
+                        error_type = ErrorType.TIMEOUT
+                    
+                    error = ProcessingException(
+                        status=ProcessingStatus.FAILED,
+                        error_type=error_type,
+                        error_message=f"AI处理失败: {error_msg[:100]}",
+                        error_details={
+                            "step": "AI处理",
+                            "reason": error_msg,
+                            "error_type": type(e).__name__
+                        },
+                        user_actions=UserActionMapper.get_actions_for_error(
+                            error_type, {}
+                        )
+                    )
+                    logger.error(
+                        "文档处理失败",
+                        document_id=document_id,
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
                     document.status = "failed"
                     await db.commit()
-                    # 截断错误消息
-                    error_msg = str(e)[:80]
-                    await update_progress(task_id, 0, f"处理失败: {error_msg}", "failed")
+                    await update_progress(task_id, 0, error.error_message, "failed")
                     return
                 
                 # 步骤4: 保存处理结果 (90-100%)
