@@ -10,6 +10,7 @@ export interface HistoryQueryParams {
   document_type?: string
   start_date?: string
   end_date?: string
+  search?: string
 }
 
 export const historyApi = {

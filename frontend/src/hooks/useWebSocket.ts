@@ -20,8 +20,16 @@ export function useWebSocket({ url, onMessage, onError, onClose }: UseWebSocketO
     let ws: WebSocket | null = null
 
     try {
-      // 将 ws:// 转换为当前协议
-      const wsUrl = url.replace('http://', 'ws://').replace('https://', 'wss://')
+      // 构建WebSocket URL
+      // 如果url已经是完整路径（以/开头），使用当前协议和主机
+      let wsUrl: string
+      if (url.startsWith('/')) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        wsUrl = `${protocol}//${window.location.host}${url}`
+      } else {
+        // 否则，将 http:// 转换为 ws://，https:// 转换为 wss://
+        wsUrl = url.replace('http://', 'ws://').replace('https://', 'wss://')
+      }
       ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {

@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from collections import defaultdict, Counter
 import structlog
+from app.services.view_registry import ViewRegistry
 
 logger = structlog.get_logger()
 
@@ -128,7 +129,12 @@ class KnowledgeGraphBuilder:
                 technologies = await extractor.extract_technologies_from_result(processing_result)
                 
                 # 如果是架构文档，从 components 中提取更多信息
-                if doc_data.document_type == 'architecture' and 'components' in processing_result:
+                # 兼容处理：如果document_type是view名称，转换为类型
+                document_type = doc_data.document_type
+                if document_type in ViewRegistry.TYPE_TO_VIEW_MAP.values():
+                    document_type = ViewRegistry.get_type_mapping(document_type)
+                
+                if document_type == 'architecture' and 'components' in processing_result:
                     components = processing_result.get('components', [])
                     if isinstance(components, list):
                         # 提取组件依赖关系

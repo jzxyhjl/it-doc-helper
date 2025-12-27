@@ -11,12 +11,13 @@ interface FileUploadProps {
 
 export default function FileUpload({
   onFileSelect,
-  maxSize = 30 * 1024 * 1024, // 30MB
+  maxSize = 15 * 1024 * 1024, // 15MB（最大限制）
   allowedTypes = ['pdf', 'docx', 'pptx', 'md', 'txt'],
   isLoading = false
 }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
 
   const validateFile = (file: File): string | null => {
     const fileExt = file.name.split('.').pop()?.toLowerCase() || ''
@@ -32,23 +33,34 @@ export default function FileUpload({
     if (file.size > maxSize) {
       return `文件大小超过限制 (${formatFileSize(maxSize)})。建议拆分后处理。`
     }
-    // 警告阈值：20MB
-    const warningThreshold = 20 * 1024 * 1024
-    if (file.size > warningThreshold) {
-      // 不阻止上传，但会在控制台记录警告
-      console.warn(`文件较大 (${formatFileSize(file.size)})，处理时间可能较长`)
+    // 警告阈值：12MB（低于最大限制15MB，提前提醒用户）
+    const warningThreshold = 12 * 1024 * 1024
+    if (file.size > warningThreshold && file.size <= maxSize) {
+      // 返回警告信息（不阻止上传，但会在UI显示提示）
+      return `WARNING:${formatFileSize(file.size)}` // 使用特殊前缀标识警告
     }
     return null
   }
 
   const handleFile = useCallback((file: File) => {
     setError(null)
+    setWarning(null)
     const validationError = validateFile(file)
     if (validationError) {
-      setError(validationError)
-      return
+      // 检查是否是警告（以WARNING:开头）
+      if (validationError.startsWith('WARNING:')) {
+        const fileSize = validationError.replace('WARNING:', '')
+        setWarning(`文件较大 (${fileSize})，处理时间可能较长，建议控制在12MB以下以获得最佳体验`)
+        // 警告不阻止上传，继续处理
+        onFileSelect(file)
+      } else {
+        // 真正的错误，阻止上传
+        setError(validationError)
+        return
+      }
+    } else {
+      onFileSelect(file)
     }
-    onFileSelect(file)
   }, [onFileSelect, maxSize, allowedTypes])
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -118,7 +130,7 @@ export default function FileUpload({
               <span className="text-primary-600 font-medium">点击上传</span> 或拖拽文件到此处
             </p>
             <p className="text-sm text-gray-500">
-              支持 {allowedTypes.join(', ').toUpperCase()} 格式，最大 {formatFileSize(maxSize)}
+              支持 {allowedTypes.join(', ').toUpperCase()} 格式，最大 {formatFileSize(maxSize)}，<span className="text-yellow-700">建议 12MB 以下</span>
             </p>
             <p className="text-xs text-gray-400 mt-1">
               提示：如使用旧版 Word 文档（.doc），请先转换为 .docx 格式
@@ -126,8 +138,25 @@ export default function FileUpload({
           </div>
         </label>
       </div>
+      {warning && (
+        <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-yellow-800">{warning}</p>
+          </div>
+        </div>
+      )}
       {error && (
-        <div className="mt-2 text-sm text-red-600">{error}</div>
+        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-red-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        </div>
       )}
     </div>
   )

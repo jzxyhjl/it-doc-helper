@@ -3,8 +3,9 @@
 支持PDF、Word、PPT、Markdown、TXT格式
 """
 import os
+import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 import structlog
 
 logger = structlog.get_logger()
@@ -13,23 +14,135 @@ logger = structlog.get_logger()
 class DocumentExtractor:
     """文档内容提取器"""
     
+    # 超时配置
+    PDF_EXTRACTION_TIMEOUT = 120  # PDF提取总超时：2分钟
+    PDF_PAGE_TIMEOUT = 5  # 单页提取超时：5秒
+    MAX_PDF_PAGES = 500  # 最大处理页数（超过则截断）
+    MAX_CONTENT_LENGTH = 400000  # 最大内容长度（40万字符，与文档大小验证器保持一致）
+    
     @staticmethod
-    async def extract_pdf(file_path: str) -> str:
-        """提取PDF文档内容"""
+    async def extract_pdf(
+        file_path: str, 
+        timeout: float = PDF_EXTRACTION_TIMEOUT,
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> str:
+        """
+        提取PDF文档内容（带超时保护）
+        
+        Args:
+            file_path: PDF文件路径
+            timeout: 总超时时间（秒）
+            progress_callback: 进度回调函数 (current_page, total_pages)
+        
+        Returns:
+            提取的文本内容
+        """
         try:
             import pdfplumber
+            import concurrent.futures
             
-            content_parts = []
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        content_parts.append(text)
+            async def _extract_with_timeout():
+                content_parts = []
+                total_pages = 0
+                processed_pages = 0
+                
+                # 在线程池中执行同步的PDF操作
+                loop = asyncio.get_event_loop()
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    # 先获取总页数
+                    def get_page_count():
+                        with pdfplumber.open(file_path) as pdf:
+                            return len(pdf.pages)
+                    
+                    total_pages = await loop.run_in_executor(executor, get_page_count)
+                    
+                    if total_pages > DocumentExtractor.MAX_PDF_PAGES:
+                        logger.warning(
+                            "PDF页数过多，将截断处理",
+                            file_path=file_path,
+                            total_pages=total_pages,
+                            max_pages=DocumentExtractor.MAX_PDF_PAGES
+                        )
+                        total_pages = DocumentExtractor.MAX_PDF_PAGES
+                    
+                    # 分页提取，每页设置超时
+                    with pdfplumber.open(file_path) as pdf:
+                        for page_num, page in enumerate(pdf.pages[:total_pages], 1):
+                            # 检查总内容长度
+                            current_length = sum(len(part) for part in content_parts)
+                            if current_length > DocumentExtractor.MAX_CONTENT_LENGTH:
+                                logger.warning(
+                                    "PDF内容过长，提前截断",
+                                    file_path=file_path,
+                                    current_length=current_length,
+                                    max_length=DocumentExtractor.MAX_CONTENT_LENGTH,
+                                    processed_pages=processed_pages
+                                )
+                                break
+                            
+                            # 单页提取（带超时）
+                            def extract_page_text(p):
+                                return p.extract_text() or ""
+                            
+                            try:
+                                page_text = await asyncio.wait_for(
+                                    loop.run_in_executor(executor, extract_page_text, page),
+                                    timeout=DocumentExtractor.PDF_PAGE_TIMEOUT
+                                )
+                                
+                                if page_text:
+                                    content_parts.append(page_text)
+                                
+                                processed_pages += 1
+                                
+                                # 进度回调（异步）
+                                if progress_callback:
+                                    try:
+                                        await progress_callback(processed_pages, total_pages)
+                                    except Exception:
+                                        pass  # 忽略回调错误
+                                
+                            except asyncio.TimeoutError:
+                                logger.warning(
+                                    f"PDF第{page_num}页提取超时，跳过",
+                                    file_path=file_path,
+                                    page_num=page_num,
+                                    timeout=DocumentExtractor.PDF_PAGE_TIMEOUT
+                                )
+                                # 跳过超时的页面，继续处理下一页
+                                processed_pages += 1
+                                continue
+                            except Exception as e:
+                                logger.warning(
+                                    f"PDF第{page_num}页提取失败，跳过",
+                                    file_path=file_path,
+                                    page_num=page_num,
+                                    error=str(e)
+                                )
+                                processed_pages += 1
+                                continue
+                
+                content = "\n\n".join(content_parts)
+                logger.info(
+                    "PDF内容提取成功",
+                    file_path=file_path,
+                    total_pages=total_pages,
+                    processed_pages=processed_pages,
+                    content_length=len(content)
+                )
+                return content
             
-            content = "\n\n".join(content_parts)
-            logger.info("PDF内容提取成功", file_path=file_path, pages=len(pdf.pages))
+            # 执行提取，带总超时保护
+            content = await asyncio.wait_for(_extract_with_timeout(), timeout=timeout)
             return content
             
+        except asyncio.TimeoutError:
+            logger.error(
+                "PDF提取总超时",
+                file_path=file_path,
+                timeout=timeout
+            )
+            raise Exception(f"PDF内容提取超时（超过{timeout}秒），文件可能过大或损坏")
         except Exception as e:
             logger.error("PDF提取失败", file_path=file_path, error=str(e))
             raise Exception(f"PDF内容提取失败: {str(e)}")
@@ -146,13 +259,20 @@ class DocumentExtractor:
             raise Exception(f"TXT内容提取失败: {str(e)}")
     
     @staticmethod
-    async def extract(file_path: str, file_type: str) -> str:
+    async def extract(
+        file_path: str, 
+        file_type: str,
+        timeout: Optional[float] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> str:
         """
-        根据文件类型提取内容
+        根据文件类型提取内容（带超时保护）
         
         Args:
             file_path: 文件路径
             file_type: 文件类型（pdf/docx/pptx/md/txt）
+            timeout: 提取超时时间（秒），None则使用默认值
+            progress_callback: 进度回调函数（仅PDF支持）
         
         Returns:
             提取的文本内容
@@ -162,18 +282,52 @@ class DocumentExtractor:
         
         file_type = file_type.lower()
         
-        extractors = {
-            'pdf': DocumentExtractor.extract_pdf,
-            'docx': DocumentExtractor.extract_word,
-            'pptx': DocumentExtractor.extract_ppt,
-            'md': DocumentExtractor.extract_markdown,
-            'markdown': DocumentExtractor.extract_markdown,
-            'txt': DocumentExtractor.extract_txt,
+        # 为不同文件类型设置默认超时
+        default_timeouts = {
+            'pdf': DocumentExtractor.PDF_EXTRACTION_TIMEOUT,
+            'docx': 60,  # Word: 1分钟
+            'pptx': 60,  # PPT: 1分钟
+            'md': 10,    # Markdown: 10秒
+            'markdown': 10,
+            'txt': 10,   # TXT: 10秒
         }
         
-        extractor = extractors.get(file_type)
-        if not extractor:
-            raise ValueError(f"不支持的文件类型: {file_type}")
+        extraction_timeout = timeout or default_timeouts.get(file_type, 60)
         
-        return await extractor(file_path)
+        # 为所有提取操作添加超时保护
+        async def extract_with_timeout():
+            if file_type == 'pdf':
+                return await DocumentExtractor.extract_pdf(
+                    file_path, 
+                    timeout=extraction_timeout,
+                    progress_callback=progress_callback
+                )
+            elif file_type == 'docx':
+                return await DocumentExtractor.extract_word(file_path)
+            elif file_type == 'pptx':
+                return await DocumentExtractor.extract_ppt(file_path)
+            elif file_type in ['md', 'markdown']:
+                return await DocumentExtractor.extract_markdown(file_path)
+            elif file_type == 'txt':
+                return await DocumentExtractor.extract_txt(file_path)
+            else:
+                raise ValueError(f"不支持的文件类型: {file_type}")
+        
+        try:
+            content = await asyncio.wait_for(
+                extract_with_timeout(),
+                timeout=extraction_timeout
+            )
+            return content
+        except asyncio.TimeoutError:
+            logger.error(
+                "文档提取超时",
+                file_path=file_path,
+                file_type=file_type,
+                timeout=extraction_timeout
+            )
+            raise Exception(
+                f"{file_type.upper()}内容提取超时（超过{extraction_timeout}秒），"
+                "文件可能过大或损坏。建议拆分后处理。"
+            )
 

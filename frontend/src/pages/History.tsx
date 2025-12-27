@@ -13,11 +13,14 @@ export default function History() {
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [documentType, setDocumentType] = useState<string>('')
+  const [searchKeyword, setSearchKeyword] = useState<string>('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleting, setBatchDeleting] = useState(false)
   const pageSize = 20
 
   useEffect(() => {
     fetchHistory()
-  }, [page, documentType])
+  }, [page, documentType, searchKeyword])
 
   const fetchHistory = async () => {
     setLoading(true)
@@ -27,9 +30,12 @@ export default function History() {
       const data = await historyApi.getHistory({
         page,
         page_size: pageSize,
-        document_type: documentType || undefined
+        document_type: documentType || undefined,
+        search: searchKeyword || undefined
       })
       setHistory(data)
+      // 清空选择（因为数据已更新）
+      setSelectedIds(new Set())
     } catch (err: any) {
       setError(err.response?.data?.detail || '获取历史记录失败')
     } finally {
@@ -51,6 +57,57 @@ export default function History() {
       fetchHistory() // 刷新列表
     } catch (err: any) {
       alert(err.response?.data?.detail || '删除失败')
+    }
+  }
+
+  const handleToggleSelect = (documentId: string, e?: React.MouseEvent | React.ChangeEvent) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(documentId)) {
+      newSelected.delete(documentId)
+    } else {
+      newSelected.add(documentId)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked && history) {
+      setSelectedIds(new Set(history.items.map(item => item.document_id)))
+    } else {
+      setSelectedIds(new Set())
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) {
+      alert('请先选择要删除的记录')
+      return
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 条记录吗？此操作不可恢复。`)) {
+      return
+    }
+
+    setBatchDeleting(true)
+    try {
+      const { documentsApi } = await import('../api/documents')
+      const result = await documentsApi.batchDelete(Array.from(selectedIds))
+      
+      if (result.failed_count > 0) {
+        alert(`删除完成：成功 ${result.success_count} 条，失败 ${result.failed_count} 条`)
+      } else {
+        alert(`成功删除 ${result.success_count} 条记录`)
+      }
+      
+      setSelectedIds(new Set())
+      fetchHistory() // 刷新列表
+    } catch (err: any) {
+      alert(err.response?.data?.detail || '批量删除失败')
+    } finally {
+      setBatchDeleting(false)
     }
   }
 
@@ -103,25 +160,71 @@ export default function History() {
         <Button onClick={() => navigate('/upload')}>上传新文档</Button>
       </div>
 
-      {/* 筛选器 */}
+      {/* 筛选器和搜索 */}
       <Card>
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">文档类型:</label>
-          <select
-            value={documentType}
-            onChange={(e) => {
-              setDocumentType(e.target.value)
-              setPage(1)
-            }}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">全部</option>
-            <option value="interview">面试题</option>
-            <option value="technical">技术文档</option>
-            <option value="architecture">架构文档</option>
-          </select>
+        <div className="flex items-center space-x-4 flex-wrap gap-4">
+          <div className="flex items-center space-x-2 flex-1 min-w-[200px]">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">文件名搜索:</label>
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => {
+                setSearchKeyword(e.target.value)
+                setPage(1)
+              }}
+              placeholder="输入文件名关键词..."
+              className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">文档类型:</label>
+            <select
+              value={documentType}
+              onChange={(e) => {
+                setDocumentType(e.target.value)
+                setPage(1)
+              }}
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">全部</option>
+              <option value="interview">面试题</option>
+              <option value="technical">技术文档</option>
+              <option value="architecture">架构文档</option>
+            </select>
+          </div>
         </div>
       </Card>
+
+      {/* 批量操作栏 */}
+      {history && history.items.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size > 0 && selectedIds.size === history.items.length}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">
+                  全选 ({selectedIds.size > 0 ? `已选择 ${selectedIds.size} 项` : '未选择'})
+                </span>
+              </label>
+            </div>
+            {selectedIds.size > 0 && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleBatchDelete}
+                disabled={batchDeleting}
+              >
+                {batchDeleting ? '删除中...' : `批量删除 (${selectedIds.size})`}
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
 
       {error && (
         <Card>
@@ -142,11 +245,23 @@ export default function History() {
                   {history.items.map((item: DocumentHistoryItem) => (
                     <div
                       key={item.document_id}
-                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => item.status === 'completed' && handleViewResult(item.document_id)}
+                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex-1">
+                        <div className="flex items-center space-x-3 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item.document_id)}
+                            onChange={(e) => {
+                              e.stopPropagation()
+                              handleToggleSelect(item.document_id, e)
+                            }}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
+                          />
+                          <div 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => item.status === 'completed' && handleViewResult(item.document_id)}
+                          >
                           <div className="flex items-center space-x-3 mb-2">
                             <h3 className="font-medium text-gray-900">{item.filename}</h3>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
@@ -164,6 +279,7 @@ export default function History() {
                               <span>处理时间: {item.processing_time}秒</span>
                             )}
                             <span>上传时间: {new Date(item.upload_time).toLocaleString('zh-CN')}</span>
+                          </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">

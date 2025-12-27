@@ -29,5 +29,6 @@ celery_app.conf.update(
 # 任务路由配置
 celery_app.conf.task_routes = {
     "app.tasks.document_processing.process_document": {"queue": "celery"},
+    "app.tasks.document_processing.process_secondary_views": {"queue": "celery"},
 }
 

@@ -52,21 +52,30 @@ async def websocket_progress(websocket: WebSocket, task_id: str):
                     # 解析进度消息
                     progress_data = json.loads(message['data'].decode('utf-8'))
                     
-                    # 发送给客户端
-                    await websocket.send_json({
-                        "type": "progress",
-                        "task_id": task_id,
-                        **progress_data
-                    })
-                    
-                    # 如果完成或失败，关闭连接
-                    if progress_data.get("status") in ["completed", "failed"]:
+                    # 检查是否是流式内容消息
+                    if progress_data.get("type") == "stream":
+                        # 直接转发流式内容
                         await websocket.send_json({
-                            "type": progress_data.get("status"),
+                            "type": "stream",
+                            "task_id": task_id,
+                            "stream": progress_data.get("stream", {})
+                        })
+                    else:
+                        # 普通进度消息
+                        await websocket.send_json({
+                            "type": "progress",
                             "task_id": task_id,
                             **progress_data
                         })
-                        break
+                        
+                        # 如果完成或失败，关闭连接
+                        if progress_data.get("status") in ["completed", "failed"]:
+                            await websocket.send_json({
+                                "type": progress_data.get("status"),
+                                "task_id": task_id,
+                                **progress_data
+                            })
+                            break
                         
                 except Exception as e:
                     logger.error("处理进度消息失败", task_id=task_id, error=str(e))

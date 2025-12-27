@@ -6,10 +6,12 @@
 
 - 📄 **多格式文档支持**：PDF、Word (.docx)、PPT (.pptx)、Markdown、TXT
   - ⚠️ **注意**：暂不支持旧版 Word 文档（.doc），请先转换为 .docx 格式
-- 🤖 **智能文档识别**：自动识别文档类型（面试题/技术文档/架构文档）
-- 📝 **面试题处理**：内容总结、问题生成、答案提取
-- 📚 **技术文档处理**：前置条件分析、学习路径规划、学习方法建议
-- 🏗️ **架构文档处理**：配置流程提取、组件全景视图、白话串讲
+- 🎯 **多视角处理**：支持学习视角、问答视角、系统视角，一个文档可以同时拥有多个视角的处理结果
+- 🤖 **智能视角识别**：自动识别文档特征，推荐主视角和次视角
+- ⚡ **快速视角切换**：复用中间结果，5秒内完成视角切换
+- 📝 **问答视角处理**：内容总结、问题生成、答案提取
+- 📚 **学习视角处理**：前置条件分析、学习路径规划、学习方法建议
+- 🏗️ **系统视角处理**：配置流程提取、组件全景视图、白话串讲
 - ⚡ **实时进度显示**：WebSocket实时推送处理进度
 - 📊 **历史记录**：保存处理历史，支持查看和管理
 
@@ -144,6 +146,7 @@ npm run dev
 
 ## 文档导航
 
+### 快速开始
 按阅读顺序：
 
 1. **[快速开始检查清单](docs/0_快速开始检查清单.md)** - 部署前检查清单（推荐先看）
@@ -154,12 +157,18 @@ npm run dev
 6. **[系统测试](docs/5_系统测试.md)** - 测试指南和测试结果
 7. **[问题排查](docs/6_问题排查.md)** - 常见问题和解决方案
 
+### 开发文档
+- **[多视角API接口文档](docs/development/API_MULTI_VIEW.md)** - 多视角系统的API接口说明
+- **[文档视角分类机制](docs/development/DOCUMENT_CLASSIFICATION.md)** - 视角识别和分类机制
+- **[处理结果结构说明](docs/development/PROCESSING_RESULT_STRUCTURE.md)** - 处理结果的数据结构
+- **[数据库迁移指南](docs/development/MIGRATION_GUIDE.md)** - 数据库迁移操作指南
+- **[AI测试和监控](docs/development/AI_TESTING_MONITORING.md)** - AI服务测试和监控说明
+
 ### 需求文档（历史）
 详细需求文档请查看 `.trae/documents/` 目录：
-- `需求分析_IT学习辅助系统.md` - 需求分析
-- `it_helper_requirements.md` - 需求文档（EARS语法）
-- `it_helper_design.md` - 技术方案设计
-- `it_helper_tasks.md` - 实施计划
+- `perspective_based_classification_requirements.md` - 多视角系统需求文档
+- `perspective_based_classification_design.md` - 多视角系统技术方案
+- `perspective_based_classification_tasks.md` - 多视角系统实施计划
 
 ## 许可证
 

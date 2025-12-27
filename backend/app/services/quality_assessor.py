@@ -6,6 +6,7 @@
 """
 from typing import Dict, Optional
 import structlog
+from app.services.view_registry import ViewRegistry
 
 logger = structlog.get_logger()
 
@@ -19,7 +20,7 @@ class QualityAssessor:
         评估处理结果质量
         
         Args:
-            document_type: 文档类型（interview/technical/architecture）
+            document_type: 文档类型（interview/technical/architecture）或视角名称（向后兼容）
             result_data: 处理结果数据
         
         Returns:
@@ -28,6 +29,11 @@ class QualityAssessor:
         logger.info("开始评估处理结果质量", document_type=document_type)
         
         try:
+            # 兼容处理：如果document_type是view名称，转换为类型
+            if document_type in ViewRegistry.TYPE_TO_VIEW_MAP.values():
+                document_type = ViewRegistry.get_type_mapping(document_type)
+            
+            # 根据类型选择评估方法（保持向后兼容的类型判断）
             if document_type == "interview":
                 score = await QualityAssessor._assess_interview_quality(result_data)
             elif document_type == "technical":

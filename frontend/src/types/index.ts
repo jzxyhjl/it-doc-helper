@@ -28,6 +28,9 @@ export interface DocumentProgressResponse {
   progress: number
   current_stage?: string
   status: string
+  enabled_views?: string[]  // 启用的视角列表
+  primary_view?: string     // 主视角
+  task_id?: string          // 处理任务ID（用于WebSocket连接）
 }
 
 export interface DocumentResultResponse {
@@ -37,6 +40,34 @@ export interface DocumentResultResponse {
   processing_time?: number
   quality_score?: number
   created_at: string
+}
+
+// 多视角结果响应
+export interface MultiViewResultResponse {
+  document_id: string
+  views: Record<string, any>  // 后端返回的是字典，key是view名称，value是结果
+  meta?: {
+    enabled_views: string[]
+    primary_view?: string
+    confidence?: Record<string, number>
+    view_count?: number
+    timestamp?: string
+  }
+}
+
+// 视角状态响应
+export interface ViewsStatusResponse {
+  document_id: string
+  views_status: Record<string, {
+    view: string
+    status: 'completed' | 'processing' | 'pending' | 'failed'
+    ready: boolean
+    is_primary: boolean
+    processing_time?: number
+    has_content?: boolean  // 是否有内容（用于判断是否显示切换按钮），可选字段以兼容旧版本API
+  }>
+  primary_view?: string
+  enabled_views: string[]
 }
 
 export interface DocumentHistoryItem {

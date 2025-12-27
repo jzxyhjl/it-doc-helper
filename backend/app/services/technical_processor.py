@@ -19,7 +19,7 @@ class TechnicalProcessor:
     """IT技术文档处理器"""
     
     @staticmethod
-    async def process(content: str) -> Dict:
+    async def process(content: str, stream_callback: Optional[callable] = None) -> Dict:
         """
         处理IT技术文档
         
