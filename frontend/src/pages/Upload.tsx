@@ -55,6 +55,11 @@ export default function Upload() {
     <div className="max-w-3xl mx-auto">
       <Card title="上传文档">
         <div className="space-y-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-800">
+              📝 我们会先理解文档说了什么，然后和你一起规划学习路径
+            </p>
+          </div>
           <FileUpload
             onFileSelect={handleFileSelect}
             isLoading={isUploading}
@@ -72,7 +77,7 @@ export default function Upload() {
                   isLoading={isUploading}
                   disabled={isUploading}
                 >
-                  开始上传
+                  开始分析
                 </Button>
               </div>
             </div>
@@ -99,7 +104,9 @@ export default function Upload() {
                 暂不支持旧版 Word 文档（.doc）。如使用 .doc 格式，请使用 Microsoft Word 或 LibreOffice 将文件另存为 .docx 格式后重新上传。
               </p>
             </div>
-            <p className="mt-2">文件大小限制：30MB</p>
+            <p className="mt-2">
+              文件大小限制：最大 15MB，<span className="text-yellow-700 font-medium">建议 12MB 以下</span>以获得最佳体验
+            </p>
           </div>
         </div>
       </Card>

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # 文件上传配置
     UPLOAD_DIR: str = "/app/uploads"
-    UPLOAD_MAX_SIZE: int = 31457280  # 30MB
+    UPLOAD_MAX_SIZE: int = 15728640  # 15MB
     ALLOWED_EXTENSIONS: str = "pdf,docx,pptx,md,txt"  # 逗号分隔的字符串
     
     def get_allowed_extensions(self) -> List[str]:
@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     
     # 日志配置
     LOG_LEVEL: str = "INFO"
+    
+    # AI Mock配置（测试环境）
+    ENABLE_AI_MOCK: bool = False  # 是否启用AI Mock（生产环境必须为False）
+    AI_MOCK_FAILURE_TYPE: str = "timeout"  # 失败类型：timeout, rate_limit, server_error, network_error, invalid_response
+    AI_MOCK_FAILURE_PROBABILITY: float = 0.0  # 失败概率（0.0-1.0）
+    
+    # 监控配置
+    ENABLE_AI_MONITORING: bool = True  # 是否启用AI监控
+    MONITORING_RETENTION_DAYS: int = 30  # 监控数据保留天数
     
     class Config:
         env_file = ".env"

@@ -18,7 +18,7 @@ export default function Recommendations({
   limit = 10,
   documentType,
   minQualityScore,
-  title = "智能推荐"
+  title = "相关推荐"
 }: RecommendationsProps) {
   const navigate = useNavigate()
   const [recommendations, setRecommendations] = useState<RecommendationsResponse | null>(null)

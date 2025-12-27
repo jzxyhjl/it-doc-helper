@@ -6,7 +6,7 @@
 - 白话串讲
 - 配置检查清单
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 import structlog
 from app.utils.tech_name_utils import clean_tech_name, normalize_tech_name, are_tech_names_equivalent
 
@@ -21,7 +21,7 @@ class ArchitectureProcessor:
     """架构文档处理器"""
     
     @staticmethod
-    async def process(content: str, progress_callback=None) -> Dict:
+    async def process(content: str, progress_callback=None, stream_callback: Optional[callable] = None) -> Dict:
         """
         处理架构/搭建文档
         
@@ -120,10 +120,19 @@ class ArchitectureProcessor:
             "related_technologies": related_technologies
         }
         
-        logger.info("架构文档处理完成", 
-                   steps=len(config_steps),
-                   components=len(components),
-                   technologies=len(related_technologies))
+        # 验证结果不为空
+        if not result or (isinstance(result, dict) and not any(result.values())):
+            logger.warning("架构文档处理结果为空或所有字段为空", 
+                          result_keys=list(result.keys()) if isinstance(result, dict) else "non-dict",
+                          config_steps_count=len(config_steps) if isinstance(config_steps, list) else 0,
+                          components_count=len(components) if isinstance(components, list) else 0)
+        else:
+            logger.info("架构文档处理完成", 
+                       steps=len(config_steps) if isinstance(config_steps, list) else 0,
+                       components=len(components) if isinstance(components, list) else 0,
+                       technologies=len(related_technologies.get("technologies", [])) if isinstance(related_technologies, dict) else 0,
+                       has_architecture_view=bool(architecture_view),
+                       has_plain_explanation=bool(plain_explanation))
         
         return result
     

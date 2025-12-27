@@ -12,12 +12,12 @@ class DocumentSizeValidator:
     """文档大小验证器"""
     
     # 阈值定义
-    FILE_SIZE_WARNING = 20 * 1024 * 1024  # 20MB
-    FILE_SIZE_MAX = 30 * 1024 * 1024      # 30MB
-    CONTENT_LENGTH_WARNING = 300000       # 30万字符
-    CONTENT_LENGTH_MAX = 500000           # 50万字符
-    PROCESS_TIME_WARNING = 480             # 480秒（8分钟）
-    PROCESS_TIME_MAX = 600                 # 600秒（10分钟）
+    FILE_SIZE_WARNING = 12 * 1024 * 1024  # 12MB（警告阈值，低于最大限制）
+    FILE_SIZE_MAX = 15 * 1024 * 1024      # 15MB（最大限制）
+    CONTENT_LENGTH_WARNING = 250000       # 25万字符（降低以更早提醒用户）
+    CONTENT_LENGTH_MAX = 400000           # 40万字符（降低以减少超时风险）
+    PROCESS_TIME_WARNING = 900             # 900秒（15分钟）
+    PROCESS_TIME_MAX = 1200                # 1200秒（20分钟，与流式生成和多视角处理对齐）
     
     @staticmethod
     def estimate_processing_time(content_length: int, doc_type: str = "technical") -> int:

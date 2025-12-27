@@ -4,7 +4,7 @@
 - 问题生成
 - 答案提取
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 import structlog
 import json
 
@@ -19,7 +19,7 @@ class InterviewProcessor:
     """面试题文档处理器"""
     
     @staticmethod
-    async def process(content: str) -> Dict:
+    async def process(content: str, stream_callback: Optional[callable] = None) -> Dict:
         """
         处理面试题文档
         

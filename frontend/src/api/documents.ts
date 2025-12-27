@@ -7,6 +7,7 @@ import type {
   DocumentResponse,
   DocumentProgressResponse,
   DocumentResultResponse,
+  MultiViewResultResponse,
   SimilarDocumentsResponse,
   RecommendationsResponse
 } from '../types'
@@ -52,9 +53,60 @@ export const documentsApi = {
 
   /**
    * 获取处理结果
+   * 注意：当不指定view和views时，返回MultiViewResultResponse；指定时返回DocumentResultResponse或ViewsResultResponse
    */
-  getResult: async (documentId: string): Promise<DocumentResultResponse> => {
-    const response = await apiClient.get(`/documents/${documentId}/result`)
+  getResult: async (
+    documentId: string,
+    view?: string,
+    views?: string
+  ): Promise<DocumentResultResponse | MultiViewResultResponse> => {
+    const params = new URLSearchParams()
+    if (view) params.append('view', view)
+    if (views) params.append('views', views)
+    
+    const queryString = params.toString()
+    const url = `/documents/${documentId}/result${queryString ? `?${queryString}` : ''}`
+    const response = await apiClient.get(url)
+    return response.data
+  },
+
+  /**
+   * 推荐视角
+   */
+  recommendViews: async (documentId: string): Promise<{
+    primary_view: string
+    enabled_views: string[]
+    detection_scores: Record<string, number>
+    cache_key?: string
+  }> => {
+    const response = await apiClient.post(`/documents/${documentId}/recommend-views`)
+    return response.data
+  },
+
+  /**
+   * 获取视角状态
+   */
+  getViewsStatus: async (documentId: string): Promise<{
+    document_id: string
+    views_status: Record<string, {
+      view: string
+      status: 'completed' | 'processing' | 'pending' | 'failed'
+      ready: boolean
+      is_primary: boolean
+      processing_time?: number
+    }>
+    primary_view?: string
+    enabled_views: string[]
+  }> => {
+    const response = await apiClient.get(`/documents/${documentId}/views/status`)
+    return response.data
+  },
+
+  /**
+   * 切换视角
+   */
+  switchView: async (documentId: string, view: string): Promise<DocumentResultResponse> => {
+    const response = await apiClient.post(`/documents/${documentId}/switch-view?view=${view}`)
     return response.data
   },
 
@@ -63,6 +115,14 @@ export const documentsApi = {
    */
   delete: async (documentId: string): Promise<void> => {
     await apiClient.delete(`/documents/${documentId}`)
+  },
+
+  /**
+   * 批量删除文档
+   */
+  batchDelete: async (documentIds: string[]): Promise<{ success_count: number; failed_count: number; failed_ids: string[] }> => {
+    const response = await apiClient.post('/documents/batch-delete', documentIds)
+    return response.data
   },
 
   /**

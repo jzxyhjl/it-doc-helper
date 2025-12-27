@@ -236,6 +236,7 @@ class EmbeddingService:
 
 # 全局向量化服务实例（延迟初始化）
 _embedding_service: Optional[EmbeddingService] = None
+_model_warmup_done: bool = False
 
 
 def get_embedding_service() -> EmbeddingService:
@@ -244,4 +245,51 @@ def get_embedding_service() -> EmbeddingService:
     if _embedding_service is None:
         _embedding_service = EmbeddingService()
     return _embedding_service
+
+
+async def warmup_embedding_model(timeout: float = 30.0) -> bool:
+    """
+    预热嵌入模型（在服务启动时调用）
+    
+    Args:
+        timeout: 超时时间（秒），默认30秒
+        
+    Returns:
+        True表示预热成功，False表示超时或失败
+    """
+    global _model_warmup_done
+    
+    if _model_warmup_done:
+        logger.info("模型已预热，跳过")
+        return True
+    
+    try:
+        import asyncio
+        service = get_embedding_service()
+        
+        # 如果使用本地模型，尝试预热
+        if service._use_local_model:
+            logger.info("开始预热嵌入模型...")
+            try:
+                # 使用一个短文本测试，触发模型加载
+                await asyncio.wait_for(
+                    service.generate_embedding("warmup"),
+                    timeout=timeout
+                )
+                _model_warmup_done = True
+                logger.info("嵌入模型预热成功")
+                return True
+            except asyncio.TimeoutError:
+                logger.warning(f"嵌入模型预热超时（{timeout}秒），将在首次使用时加载")
+                return False
+            except Exception as e:
+                logger.warning("嵌入模型预热失败，将在首次使用时加载", error=str(e))
+                return False
+        else:
+            logger.info("使用API方案，无需预热模型")
+            _model_warmup_done = True
+            return True
+    except Exception as e:
+        logger.warning("模型预热异常", error=str(e))
+        return False
 
